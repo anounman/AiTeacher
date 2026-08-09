@@ -1,0 +1,31 @@
+~~Logic Or Gate~~
+
+[DRAW]
+CURVE 120,40 148,70 120,100 width=2 style=smooth
+CUBIC 120,40 150,45 175,58 200,70 width=2
+CUBIC 120,100 150,95 175,82 200,70 width=2
+LINE 60,55 126,55 width=2
+LINE 60,85 126,85 width=2
+ARROW 200,70 265,70 width=2 head=8
+TEXT 50,48 "A=0" center=true scale=0.6
+TEXT 50,98 "B=1" center=true scale=0.6
+TEXT 275,63 "Y=1" center=false scale=0.7
+TEXT 150,125 "OR Gate Truth Table" center=true scale=0.6
+GRID 90,145 120,100 40,20 width=1
+TEXT 110,155 "A" center=true scale=0.6
+TEXT 150,155 "B" center=true scale=0.6
+TEXT 190,155 "Y" center=true scale=0.6
+TEXT 110,175 "0" center=true scale=0.6
+TEXT 150,175 "0" center=true scale=0.6
+TEXT 190,175 "0" center=true scale=0.6
+TEXT 110,195 "0" center=true scale=0.6
+TEXT 150,195 "1" center=true scale=0.6
+TEXT 190,195 "1" center=true scale=0.6
+TEXT 110,215 "1" center=true scale=0.6
+TEXT 150,215 "0" center=true scale=0.6
+TEXT 190,215 "1" center=true scale=0.6
+TEXT 110,235 "1" center=true scale=0.6
+TEXT 150,235 "1" center=true scale=0.6
+TEXT 190,235 "1" center=true scale=0.6
+HIGHLIGHT 90,185 120,20
+[/DRAW]

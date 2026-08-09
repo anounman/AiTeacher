@@ -1,0 +1,51 @@
+~~Er Diagram University~~
+
+[DRAW]
+RECT 10,60 80,40 fill=light
+TEXT 50,80 "Student" center=true scale=0.6
+ELLIPSE 50,25 30,13
+TEXT 50,25 "student_id" center=true scale=0.45
+LINE 50,38 50,60
+ELLIPSE 50,135 25,13
+TEXT 50,135 "name" center=true scale=0.5
+LINE 50,122 50,100
+
+LINE 90,80 125,80
+TEXT 107,72 "M" center=true scale=0.6
+
+POLYGON 160,65 195,80 160,95 125,80 fill=light
+TEXT 160,80 "Enrolls" center=true scale=0.5
+ELLIPSE 160,25 25,13
+TEXT 160,25 "grade" center=true scale=0.5
+LINE 160,38 160,65
+
+LINE 195,80 230,80
+TEXT 212,72 "N" center=true scale=0.6
+
+RECT 230,60 80,40 fill=light
+TEXT 270,80 "Course" center=true scale=0.6
+ELLIPSE 270,25 28,13
+TEXT 270,25 "course_id" center=true scale=0.45
+LINE 270,38 270,60
+ELLIPSE 270,135 25,13
+TEXT 270,135 "title" center=true scale=0.5
+LINE 270,122 270,100
+
+LINE 310,80 345,80
+TEXT 327,72 "N" center=true scale=0.6
+
+POLYGON 380,65 415,80 380,95 345,80 fill=light
+TEXT 380,80 "Teaches" center=true scale=0.5
+
+LINE 415,80 450,80
+TEXT 432,72 "1" center=true scale=0.6
+
+RECT 450,60 80,40 fill=light
+TEXT 490,80 "Professor" center=true scale=0.6
+ELLIPSE 490,25 25,13
+TEXT 490,25 "prof_id" center=true scale=0.45
+LINE 490,38 490,60
+ELLIPSE 490,135 25,13
+TEXT 490,135 "name" center=true scale=0.5
+LINE 490,122 490,100
+[/DRAW]

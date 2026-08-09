@@ -1,0 +1,34 @@
+~~Logic Nand Gate~~
+
+[DRAW]
+TEXT 100,15 "NAND Gate" center=true scale=0.8
+LINE 70,35 70,95 width=2
+LINE 70,35 120,35 width=2
+LINE 70,95 120,95 width=2
+ARC 120,65 30 -90 90 width=2
+CIRCLE 153,65 7 width=2
+LINE 30,50 70,50 width=2
+LINE 30,80 70,80 width=2
+LINE 160,65 205,65 width=2
+TEXT 22,50 "A=1" center=true scale=0.6
+TEXT 22,80 "B=1" center=true scale=0.6
+TEXT 215,65 "Y=0" center=true scale=0.6
+TEXT 240,22 "Truth Table" center=false scale=0.6
+GRID 240,30 120,125 40,25 width=1
+TEXT 260,42 "A" center=true scale=0.6
+TEXT 300,42 "B" center=true scale=0.6
+TEXT 340,42 "Y" center=true scale=0.6
+TEXT 260,67 "0" center=true scale=0.6
+TEXT 300,67 "0" center=true scale=0.6
+TEXT 340,67 "1" center=true scale=0.6
+TEXT 260,92 "0" center=true scale=0.6
+TEXT 300,92 "1" center=true scale=0.6
+TEXT 340,92 "1" center=true scale=0.6
+TEXT 260,117 "1" center=true scale=0.6
+TEXT 300,117 "0" center=true scale=0.6
+TEXT 340,117 "1" center=true scale=0.6
+HIGHLIGHT 240,130 120,25
+TEXT 260,142 "1" center=true scale=0.6
+TEXT 300,142 "1" center=true scale=0.6
+TEXT 340,142 "0" center=true scale=0.6
+[/DRAW]

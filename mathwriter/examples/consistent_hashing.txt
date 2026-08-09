@@ -1,0 +1,34 @@
+~~Consistent Hashing~~
+
+[DRAW]
+CIRCLE 220,220 160 width=2 style=smooth
+CIRCLE 165,70 14 style=dashed width=1
+DOT 220,60 r=8
+TEXT 220,42 "A" center=true
+DOT 359,300 r=8
+TEXT 376,312 "B" center=true
+DOT 81,300 r=8
+TEXT 64,312 "C" center=true
+DOT 165,70 r=8
+TEXT 165,48 "D (new)" center=true scale=0.55
+DOT 261,66 r=4
+TEXT 272,54 "1" center=true scale=0.5
+DOT 333,107 r=4
+TEXT 348,96 "2" center=true scale=0.5
+DOT 378,192 r=4
+TEXT 393,192 "3" center=true scale=0.5
+DOT 378,248 r=4
+TEXT 393,248 "4" center=true scale=0.5
+DOT 275,370 r=4
+TEXT 275,385 "5" center=true scale=0.5
+DOT 165,370 r=4
+TEXT 165,385 "6" center=true scale=0.5
+DOT 63,248 r=4
+TEXT 48,248 "7" center=true scale=0.5
+DOT 117,97 r=4
+TEXT 117,82 "8" center=true scale=0.5
+ARROW 122,94 153,77 head=8 style=dashed width=2
+TEXT 140,92 "migrates" center=true scale=0.45
+TEXT 220,420 "Adding node D: only key 8 remaps (A -> D)" center=true scale=0.6
+TEXT 220,440 "Keys 1-4 stay on B, keys 5-6 stay on C, key 7 stays on A" center=true scale=0.5
+[/DRAW]

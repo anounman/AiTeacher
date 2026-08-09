@@ -1,0 +1,66 @@
+~~Hdfs Architecture~~
+
+[DRAW]
+RECT 200,10 160,55 fill=light
+TEXT 280,30 "NameNode" center=true scale=0.8
+TEXT 280,50 "metadata: /data/bigfile.txt" center=true scale=0.45
+
+RECT 20,130 90,45 fill=light
+TEXT 65,150 "Client" center=true scale=0.7
+TEXT 65,165 "write" center=true scale=0.45
+
+ARROW 110,140 200,35 width=2 style=smooth
+TEXT 155,75 "1. get block" center=true scale=0.45
+ARROW 200,55 110,155 style=dashed
+TEXT 155,95 "locations" center=true scale=0.45
+
+RECT 30,240 160,120 fill=light
+TEXT 110,258 "DataNode 1" center=true scale=0.6
+RECT 45,275 55,28
+TEXT 72,289 "B1" center=true scale=0.55
+TEXT 72,308 "rep1" center=true scale=0.4
+RECT 110,275 55,28
+TEXT 137,289 "B3" center=true scale=0.55
+TEXT 137,308 "rep1" center=true scale=0.4
+TEXT 110,330 "blk 128MB" center=true scale=0.4
+
+RECT 210,240 160,120 fill=light
+TEXT 290,258 "DataNode 2" center=true scale=0.6
+RECT 225,275 55,28
+TEXT 252,289 "B1" center=true scale=0.55
+TEXT 252,308 "rep2" center=true scale=0.4
+RECT 290,275 55,28
+TEXT 317,289 "B2" center=true scale=0.55
+TEXT 317,308 "rep1" center=true scale=0.4
+TEXT 290,330 "blk 128MB" center=true scale=0.4
+
+RECT 390,240 160,120 fill=light
+TEXT 470,258 "DataNode 3" center=true scale=0.6
+RECT 405,275 55,28
+TEXT 432,289 "B2" center=true scale=0.55
+TEXT 432,308 "rep2" center=true scale=0.4
+RECT 470,275 55,28
+TEXT 497,289 "B3" center=true scale=0.55
+TEXT 497,308 "rep2" center=true scale=0.4
+TEXT 470,330 "blk 128MB" center=true scale=0.4
+
+ARROW 110,160 105,240 width=2 style=smooth
+TEXT 130,200 "2. write B1,B3" center=true scale=0.4
+
+ARROW 110,170 285,240 width=2 style=smooth
+TEXT 200,205 "3. write B1,B2" center=true scale=0.4
+
+ARROW 110,178 470,240 width=2 style=smooth
+TEXT 290,225 "4. write B2,B3" center=true scale=0.4
+
+ARROW 190,290 225,290 style=wobbly
+TEXT 207,282 "repl" center=true scale=0.35
+
+ARROW 370,290 405,290 style=wobbly
+TEXT 387,282 "repl" center=true scale=0.35
+
+ARROW 165,330 470,330 style=dashed
+TEXT 317,322 "replication pipeline (rf=2)" center=true scale=0.4
+
+TEXT 280,395 "File /data/bigfile.txt = B1 + B2 + B3   |   replication factor = 2" center=true scale=0.5
+[/DRAW]

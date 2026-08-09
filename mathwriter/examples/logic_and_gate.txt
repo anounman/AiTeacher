@@ -1,0 +1,33 @@
+~~Logic And Gate~~
+
+[DRAW]
+POLYGON 80,30 110,30 132,38 140,60 132,82 110,90 80,90 fill=light
+LINE 30,45 80,45 width=2
+LINE 30,75 80,75 width=2
+LINE 140,60 190,60 width=2
+TEXT 22,45 "A" center=true
+TEXT 22,75 "B" center=true
+TEXT 198,60 "Y" center=true
+TEXT 55,38 "1" center=true scale=0.5
+TEXT 55,68 "0" center=true scale=0.5
+TEXT 165,52 "0" center=true scale=0.5
+TEXT 110,62 "AND" center=true scale=0.6
+GRID 30,110 120,125 40,25
+TEXT 50,122 "A" center=true scale=0.6
+TEXT 90,122 "B" center=true scale=0.6
+TEXT 130,122 "Y" center=true scale=0.6
+TEXT 50,147 "0" center=true
+TEXT 90,147 "0" center=true
+TEXT 130,147 "0" center=true
+TEXT 50,172 "0" center=true
+TEXT 90,172 "1" center=true
+TEXT 130,172 "0" center=true
+TEXT 50,197 "1" center=true
+TEXT 90,197 "0" center=true
+TEXT 130,197 "0" center=true
+TEXT 50,222 "1" center=true
+TEXT 90,222 "1" center=true
+TEXT 130,222 "1" center=true
+HIGHLIGHT 30,185 120,25
+TEXT 160,197 "← current" center=false scale=0.5
+[/DRAW]

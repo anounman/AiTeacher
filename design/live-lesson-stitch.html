@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AiTeacher - Whiteboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary-container": "#72726d",
+                        "on-secondary": "#ffffff",
+                        "secondary-fixed": "#e4e2e1",
+                        "on-surface": "#1c1b1b",
+                        "on-primary": "#ffffff",
+                        "surface-variant": "#e5e2e0",
+                        "primary-fixed": "#e4e2dd",
+                        "surface-container": "#f1edec",
+                        "primary": "#5f5f5a",
+                        "tertiary-fixed-dim": "#ffb3ae",
+                        "error-container": "#ffdad6",
+                        "secondary-container": "#e4e2e1",
+                        "outline-variant": "#c7c7bf",
+                        "on-secondary-fixed-variant": "#474747",
+                        "surface-container-highest": "#e5e2e0",
+                        "surface-tint": "#5f5f5a",
+                        "surface-dim": "#ddd9d8",
+                        "secondary": "#5f5e5e",
+                        "primary-container": "#faf8f2",
+                        "surface-container-high": "#ebe7e6",
+                        "error": "#ba1a1a",
+                        "inverse-surface": "#313030",
+                        "surface": "#fdf8f7",
+                        "secondary-fixed-dim": "#c8c6c6",
+                        "on-error": "#ffffff",
+                        "on-secondary-fixed": "#1b1c1c",
+                        "on-tertiary": "#ffffff",
+                        "inverse-on-surface": "#f4f0ef",
+                        "tertiary-container": "#fff6f5",
+                        "on-primary-fixed-variant": "#474743",
+                        "primary-fixed-dim": "#c8c6c1",
+                        "on-surface-variant": "#464741",
+                        "on-background": "#1c1b1b",
+                        "surface-container-low": "#f7f3f1",
+                        "on-primary-fixed": "#1b1c19",
+                        "surface-bright": "#fdf8f7",
+                        "on-secondary-container": "#656464",
+                        "tertiary-fixed": "#ffdad7",
+                        "background": "#fdf8f7",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-fixed-variant": "#8b191d",
+                        "inverse-primary": "#c8c6c1",
+                        "on-tertiary-container": "#c64542",
+                        "outline": "#777871",
+                        "on-tertiary-fixed": "#410004",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary": "#ac3231"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "element-gap": "24px",
+                        "unit": "4px",
+                        "floating-margin": "32px",
+                        "container-padding": "40px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Playfair Display"],
+                        "display-lg": ["Playfair Display"],
+                        "transcript-body": ["Playfair Display"],
+                        "headline-md-mobile": ["Playfair Display"],
+                        "ui-label-sm": ["JetBrains Mono"],
+                        "ui-label-caps": ["JetBrains Mono"],
+                        "handwriting": ["Caveat", "cursive"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["32px", {"lineHeight": "40px", "fontWeight": "500"}],
+                        "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                        "transcript-body": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "headline-md-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "500"}],
+                        "ui-label-sm": ["10px", {"lineHeight": "14px", "fontWeight": "400"}],
+                        "ui-label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.12em", "fontWeight": "500"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .glass-panel {
+            background-color: rgba(253, 248, 247, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(199, 199, 191, 0.2);
+            box-shadow: 0px 8px 32px rgba(0, 0, 0, 0.04);
+        }
+        
+        .handwriting-lg {
+            font-family: 'Caveat', cursive;
+            font-size: 48px;
+            color: #333333;
+            line-height: 1.2;
+        }
+
+        .handwriting-md {
+            font-family: 'Caveat', cursive;
+            font-size: 32px;
+            color: #333333;
+            line-height: 1.4;
+        }
+
+        .handwriting-sm {
+            font-family: 'Caveat', cursive;
+            font-size: 24px;
+            line-height: 1.4;
+        }
+        
+        /* Hide scrollbar for transcript */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="h-full overflow-hidden text-on-surface bg-background">
+<!-- Infinite Canvas Background -->
+<div class="absolute inset-0 w-full h-full -z-10" data-alt="A seamless, light warm off-white graph paper texture with very faint, subtle grid lines, creating a minimalist and studious workspace aesthetic suitable for a digital whiteboard background." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBj6S61agHDJmzNr8YufUn7vyjdffmqpP1HazjCp2X82SmFmhsAEiS9XmhJSPi4khNkICo-7SI6ZDlQXh61KT80X1V7FTCxhElf_f2655ikNeQJjYxPBHRBaBk1NmEnCVKkw3-0mttFG_ZQD-AHbjC99Scov4CBeX4ITxa579BaoDqieeK1TK1Ky4SpPFHJNeeW2-p5EAINfFeKtA0DsRtySqQMj7_KVanSNNjbygR1qSFfAwMCZKblRwAJzX46XMGmDuO1GvA9UwUM'); background-repeat: repeat;"></div>
+<!-- Board Content Canvas -->
+<main class="absolute inset-0 w-full h-full pt-32 px-12 pb-32 overflow-hidden flex items-center justify-center relative">
+<!-- Faint History (Top Left) -->
+<div class="absolute top-24 left-24 opacity-20 pointer-events-none transform -rotate-2">
+<p class="handwriting-sm">Recall: Integration by Substitution</p>
+<p class="handwriting-sm ml-4">∫ f(g(x))g'(x)dx = ∫ f(u)du</p>
+</div>
+<!-- Main Content Area -->
+<div class="relative w-full max-w-4xl mx-auto flex flex-col items-center">
+<!-- Heading -->
+<div class="mb-12 relative w-fit">
+<h1 class="handwriting-lg">Integration by Parts</h1>
+<!-- Hand-drawn underline -->
+<svg class="absolute -bottom-4 left-0 w-full h-6" preserveaspectratio="none" viewbox="0 0 300 20">
+<path d="M5,10 Q150,15 295,5" fill="none" stroke="#333333" stroke-linecap="round" stroke-width="2"></path>
+</svg>
+</div>
+<!-- Main Equation -->
+<div class="relative mt-8">
+<p class="handwriting-md tracking-wider">∫ u dv = <span class="relative inline-block">uv</span> - ∫ v du</p>
+<!-- Emphasis Overlay -->
+<div class="absolute -top-12 left-[120px]">
+<svg class="absolute -top-2 -left-8 pointer-events-none" height="120" viewbox="0 0 120 120" width="120">
+<!-- Hand-drawn circle -->
+<path class="opacity-80" d="M60,20 C85,15 105,35 100,60 C95,85 70,105 45,95 C25,85 20,55 35,35 C45,20 55,20 60,20" fill="none" stroke="#ba1a1a" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<!-- Arrow -->
+<path d="M80,30 Q95,15 110,25" fill="none" stroke="#ba1a1a" stroke-linecap="round" stroke-width="1.5"></path>
+<polygon fill="#ba1a1a" points="110,25 105,20 108,28"></polygon>
+</svg>
+<span class="handwriting-sm text-error absolute -top-8 -right-16 whitespace-nowrap">Product</span>
+</div>
+<!-- Secondary Note -->
+<div class="absolute top-4 -right-64 transform rotate-1">
+<p class="handwriting-sm text-tertiary">Let u = x, dv = cos(x)dx</p>
+</div>
+</div>
+<!-- Step 2 -->
+<div class="relative mt-24 opacity-60">
+<p class="handwriting-md tracking-wider">∫ x cos(x)dx = x sin(x) - ∫ sin(x) dx</p>
+</div>
+</div>
+</main>
+<!-- Top Left Breadcrumb -->
+<div class="fixed top-8 left-8 z-50 glass-panel px-4 py-2 rounded-lg">
+<span class="font-ui-label-sm text-ui-label-sm text-on-surface-variant flex items-center gap-2">
+            Calculus II 
+            <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-on-surface font-medium">Integration by Parts</span>
+</span>
+</div>
+<!-- Top Center App Bar (TopAppBar) -->
+<nav class="fixed top-0 left-0 right-0 z-50 flex justify-center items-center pt-8 pointer-events-none">
+<div class="glass-panel rounded-full px-6 py-3 flex items-center gap-8 pointer-events-auto">
+<!-- Brand / Status -->
+<div class="flex items-center gap-3 border-r border-outline-variant/20 pr-6">
+<span class="font-ui-label-caps text-ui-label-caps text-primary font-bold tracking-widest uppercase">AITutor</span>
+<div class="flex items-center gap-1.5 bg-surface-container-low px-2 py-1 rounded-md">
+<span class="material-symbols-outlined text-[14px] text-tertiary">edit</span>
+<span class="font-ui-label-sm text-ui-label-sm text-on-surface-variant">Writing...</span>
+</div>
+</div>
+<!-- Tools -->
+<div class="flex items-center gap-4">
+<button class="flex flex-col items-center gap-1 text-on-surface-variant hover:text-primary transition-colors group">
+<div class="w-10 h-10 rounded-full flex items-center justify-center group-hover:bg-surface-variant/50 transition-colors">
+<span class="material-symbols-outlined">pause</span>
+</div>
+<span class="font-ui-label-sm text-ui-label-sm opacity-0 group-hover:opacity-100 transition-opacity">Pause</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant hover:text-primary transition-colors group">
+<div class="w-10 h-10 rounded-full flex items-center justify-center group-hover:bg-surface-variant/50 transition-colors">
+<span class="material-symbols-outlined">mic</span>
+</div>
+<span class="font-ui-label-sm text-ui-label-sm opacity-0 group-hover:opacity-100 transition-opacity">Mic</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-primary font-bold transition-colors group">
+<div class="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">select_window</span>
+</div>
+<span class="font-ui-label-sm text-ui-label-sm">Select</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant hover:text-primary transition-colors group">
+<div class="w-10 h-10 rounded-full flex items-center justify-center group-hover:bg-surface-variant/50 transition-colors">
+<span class="material-symbols-outlined">add_box</span>
+</div>
+<span class="font-ui-label-sm text-ui-label-sm opacity-0 group-hover:opacity-100 transition-opacity">New Page</span>
+</button>
+</div>
+</div>
+</nav>
+<!-- Right SideNav (Lesson Transcript) -->
+<aside class="fixed right-0 top-1/2 -translate-y-1/2 z-40 w-80 h-[80vh] glass-panel rounded-l-2xl border-l border-y border-outline-variant/20 shadow-lg flex flex-col transition-transform duration-300 ease-in-out">
+<!-- Collapse Handle -->
+<button class="absolute -left-4 top-1/2 -translate-y-1/2 w-8 h-16 bg-surface border border-outline-variant/20 rounded-full flex items-center justify-center shadow-sm text-on-surface-variant hover:text-primary z-10">
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</button>
+<!-- Header -->
+<div class="p-6 border-b border-outline-variant/10 flex items-center justify-between shrink-0">
+<div>
+<h2 class="font-headline-md-mobile text-headline-md-mobile text-on-surface">Lesson Transcript</h2>
+<p class="font-ui-label-sm text-ui-label-sm text-on-surface-variant mt-1">AI Tutor Insights</p>
+</div>
+<span class="material-symbols-outlined text-secondary">notes</span>
+</div>
+<!-- Scrollable Transcript -->
+<div class="flex-1 overflow-y-auto p-6 no-scrollbar flex flex-col gap-6">
+<div class="flex gap-4">
+<div class="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center shrink-0">
+<span class="font-ui-label-caps text-[10px]">AI</span>
+</div>
+<div>
+<p class="font-transcript-body text-[15px] leading-relaxed text-on-surface-variant">
+                        We're going to tackle integration by parts. It's essentially the product rule for integrals.
+                    </p>
+</div>
+</div>
+<div class="flex gap-4">
+<div class="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center shrink-0">
+<span class="font-ui-label-caps text-[10px]">AI</span>
+</div>
+<div class="space-y-2">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-surface-container-high rounded-full border border-outline-variant/20">
+<span class="material-symbols-outlined text-[12px] text-tertiary">edit</span>
+<span class="font-ui-label-sm text-ui-label-sm text-on-surface">Board Step</span>
+</div>
+<p class="font-transcript-body text-[15px] leading-relaxed text-on-surface">
+                        The formula is the integral of <span class="italic">u dv</span> equals <span class="italic">uv</span> minus the integral of <span class="italic">v du</span>.
+                    </p>
+</div>
+</div>
+<div class="flex gap-4 opacity-50">
+<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-primary text-[16px]">person</span>
+</div>
+<div>
+<p class="font-transcript-body text-[15px] leading-relaxed text-on-surface">
+                        How do I choose what <span class="italic">u</span> should be?
+                    </p>
+</div>
+</div>
+<div class="flex gap-4">
+<div class="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center shrink-0">
+<span class="font-ui-label-caps text-[10px]">AI</span>
+</div>
+<div>
+<p class="font-transcript-body text-[15px] leading-relaxed text-on-surface">
+                        Great question. A good rule of thumb is LIATE: Logarithmic, Inverse trigonometric, Algebraic, Trigonometric, Exponential. Pick <span class="italic">u</span> in that order. Let's look at an example.
+                    </p>
+</div>
+</div>
+</div>
+<!-- Footer / CTA -->
+<div class="p-4 border-t border-outline-variant/10 shrink-0">
+<button class="w-full py-3 bg-inverse-surface text-inverse-on-surface font-ui-label-caps text-ui-label-caps rounded-lg hover:opacity-90 transition-opacity">
+                DOWNLOAD PDF
+            </button>
+</div>
+</aside>
+<!-- Bottom Center Input Bar -->
+<div class="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4 pointer-events-none">
+<div class="glass-panel rounded-full p-2 flex items-center gap-2 shadow-lg pointer-events-auto">
+<button class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface hover:bg-surface-variant transition-colors shrink-0">
+<span class="material-symbols-outlined">mic</span>
+</button>
+<input class="flex-1 bg-transparent border-none focus:ring-0 font-transcript-body text-[16px] text-on-surface placeholder:text-on-surface-variant/50 px-4 h-full outline-none" placeholder="Ask anything — the lesson pauses for you" type="text"/>
+<button class="w-12 h-12 rounded-full bg-primary text-on-primary flex items-center justify-center hover:bg-primary/90 transition-colors shrink-0 shadow-sm">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">arrow_upward</span>
+</button>
+</div>
+</div>
+<!-- Bottom Right Controls (BottomNavBar approximation for canvas context) -->
+<div class="fixed bottom-10 right-8 z-40 flex items-end gap-4">
+<!-- Minimap -->
+<div class="w-24 h-24 glass-panel rounded-xl p-2 relative overflow-hidden border border-outline-variant/20 shadow-md">
+<div class="w-full h-full bg-surface-container-lowest rounded opacity-50 relative">
+<!-- Current viewport indicator -->
+<div class="absolute top-1/4 left-1/4 w-1/2 h-1/2 border border-primary rounded-sm bg-primary/10"></div>
+<!-- Content representations -->
+<div class="absolute top-[30%] left-[30%] w-8 h-1 bg-on-surface-variant rounded-full"></div>
+<div class="absolute top-[45%] left-[25%] w-12 h-1 bg-on-surface-variant rounded-full"></div>
+</div>
+</div>
+<!-- Zoom Controls -->
+<div class="glass-panel rounded-full flex flex-col items-center p-1 shadow-md">
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-variant/50 transition-colors">
+<span class="material-symbols-outlined">add</span>
+</button>
+<span class="font-ui-label-sm text-[10px] text-on-surface py-2 border-y border-outline-variant/10 w-full text-center">100%</span>
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-variant/50 transition-colors">
+<span class="material-symbols-outlined">remove</span>
+</button>
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-variant/50 transition-colors mt-1" title="Fit to screen">
+<span class="material-symbols-outlined">fit_screen</span>
+</button>
+</div>
+</div>
+</body></html>

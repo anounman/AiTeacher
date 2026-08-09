@@ -1,0 +1,18 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Generated output (PDFs, preview PNGs, gap reports)
+output/
+
+# Local-only input data (handwriting scans, coursework solutions)
+pages/
+solutions/
+
+# macOS
+.DS_Store
+
+# Editor
+*.swp

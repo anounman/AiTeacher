@@ -1,0 +1,19 @@
+~~Array Indexing~~
+
+[DRAW]
+GRID 10,30 300,50 50,50
+TEXT 35,55 "10" center=true scale=0.8
+TEXT 85,55 "25" center=true scale=0.8
+TEXT 135,55 "8" center=true scale=0.8
+TEXT 185,55 "42" center=true scale=0.8
+TEXT 235,55 "17" center=true scale=0.8
+TEXT 285,55 "3" center=true scale=0.8
+TEXT 35,100 "0" center=true scale=0.6
+TEXT 85,100 "1" center=true scale=0.6
+TEXT 135,100 "2" center=true scale=0.6
+TEXT 185,100 "3" center=true scale=0.6
+TEXT 235,100 "4" center=true scale=0.6
+TEXT 285,100 "5" center=true scale=0.6
+TEXT 160,15 "array" center=true scale=0.6
+TEXT 160,118 "index" center=true scale=0.6
+[/DRAW]

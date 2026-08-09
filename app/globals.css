@@ -1,0 +1,1082 @@
+@import "tailwindcss";
+
+/* ---- Graph Paper Lab ---------------------------------------------------
+   A study-workspace palette: aged paper + ink, a single red notebook
+   margin rule as the signature, a faint graph-paper grid as the surface.
+   Serif body (Newsreader) for reading prose, mono (JetBrains Mono) for chrome.
+   --------------------------------------------------------------------- */
+
+:root {
+  --paper: #f2f0e7;     /* aged graph-paper background */
+  --paper-2: #fbfaf3;   /* fresh paper — message cards */
+  --paper-3: #eae8dc;   /* deeper paper — sidebar/binding */
+  --ink: #1f2020;       /* near-black, warm-neutral */
+  --ink-2: #565850;     /* muted ink — secondary text */
+  --ink-3: #6f7166;     /* faint — captions (bumped for WCAG AA on paper) */
+  --rule: #c8443a;      /* red notebook margin rule (signature accent) */
+  --feynman: #2e5c8a;   /* chalk blue — Feynman-mode accent */
+  --line: #d7d5c8;      /* hairlines */
+  --grid: rgba(31, 32, 32, 0.045); /* faint graph-paper grid */
+  --shadow-card: 0 1px 2px rgba(31, 32, 32, 0.06), 0 1px 1px rgba(31, 32, 32, 0.03);
+}
+
+html[data-theme="dark"] {
+  --paper: #1a1b1b;
+  --paper-2: #252626;
+  --paper-3: #131414;
+  --ink: #ecead8;
+  --ink-2: #a8a99e;
+  --ink-3: #9a9b8e;
+  --rule: #d9685a;
+  --feynman: #7aa8d8;
+  --line: #3a3b39;
+  --grid: rgba(236, 234, 216, 0.05);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.34), 0 1px 1px rgba(0, 0, 0, 0.20);
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-paper-3: var(--paper-3);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-feynman: var(--feynman);
+  --color-line: var(--line);
+  --font-serif: var(--font-newsreader);
+  --font-mono: var(--font-jetbrains);
+  /* Native UI sans for dense chrome (transcript bubbles). Serif prose reads
+     badly at 13px in a 340px column, and this costs no extra font download. */
+  --font-ui: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --shadow-card: var(--shadow-card);
+}
+
+html {
+  font-feature-settings: "ss01", "ss02";
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+/* Full-window app shell. `dvh` follows Safari's expanding/collapsing browser
+   chrome; safe-area insets keep controls clear of the iPad status area and
+   home indicator when launched from the Home Screen. */
+.app-shell {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+}
+.app-header {
+  padding-top: max(0.625rem, env(safe-area-inset-top));
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+}
+.app-chat-input {
+  padding-right: max(1rem, env(safe-area-inset-right));
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  padding-left: max(1rem, env(safe-area-inset-left));
+}
+.app-sidebar {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+}
+.app-menu-button { min-width: 40px; min-height: 40px; }
+
+/* Safari zooms the page when a focused control is smaller than 16px. Keeping
+   touch-device controls at 16px makes the viewport stay put like a native app. */
+@media (hover: none) and (pointer: coarse) {
+  input, textarea, select { font-size: 16px !important; }
+  .app-chat-input button { min-width: 40px; min-height: 40px; }
+}
+
+/* The graph-paper surface: faint square grid. */
+.graph-paper {
+  background-image:
+    linear-gradient(to right, var(--grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: -1px -1px;
+}
+
+/* The red notebook margin rule — a vertical line on the sidebar's edge. */
+.margin-rule {
+  border-right: 2px solid var(--rule);
+}
+
+/* ---- Settings (configuration page) ---------------------------------- */
+.settings-rail {
+  position: sticky; top: 3.5rem;
+  align-self: flex-start;
+  width: 160px; flex: none;
+  display: none;
+}
+@media (min-width: 900px) { .settings-rail { display: block; } }
+.settings-rail-link {
+  display: block;
+  padding: 5px 0;
+  font-size: 12px;
+  color: var(--ink-3);
+  transition: color 120ms;
+}
+.settings-rail-link:hover { color: var(--ink); }
+.settings-card { margin-top: 1.5rem; padding: 22px 26px 24px; scroll-margin-top: 2rem; }
+.settings-card-title {
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 17px; font-weight: 600; color: var(--ink);
+}
+.settings-card-lede {
+  margin-top: 4px; margin-bottom: 16px;
+  font-size: 13.5px; line-height: 1.55; color: var(--ink-2);
+  max-width: 56ch;
+}
+.settings-card-title + .settings-grid { margin-top: 16px; }
+.settings-grid {
+  display: grid; gap: 18px 24px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 720px) { .settings-grid { grid-template-columns: 1fr 1fr; } }
+.settings-input {
+  border: 0; border-bottom: 1px solid var(--line);
+  background: transparent;
+  padding: 7px 2px; font-size: 13.5px; color: var(--ink);
+  outline: none; transition: border-color 140ms;
+}
+.settings-input:focus { border-color: var(--ink); }
+.settings-input:disabled { color: var(--ink-3); }
+textarea.settings-input { border: 1px solid var(--line); border-radius: 3px; padding: 10px 12px; }
+textarea.settings-input:focus { border-color: var(--ink); }
+.settings-savebar {
+  position: sticky; bottom: 0;
+  margin-top: 1.5rem;
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 4px;
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: blur(6px);
+}
+.mcp-row {
+  display: flex; align-items: center; gap: 12px;
+  border: 1px solid var(--line); border-radius: 3px;
+  background: var(--paper-2);
+  padding: 10px 14px;
+}
+.mcp-badge {
+  margin-left: 8px;
+  font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--feynman);
+  border: 1px solid color-mix(in srgb, var(--feynman) 40%, transparent);
+  border-radius: 999px; padding: 1px 7px;
+}
+.mcp-toggle { position: relative; flex: none; width: 34px; height: 20px; }
+.mcp-toggle input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+.mcp-toggle span {
+  position: absolute; inset: 0; border-radius: 999px;
+  background: var(--line); transition: background 140ms;
+}
+.mcp-toggle span::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: 999px;
+  background: var(--paper-2); transition: transform 140ms;
+}
+.mcp-toggle input:checked + span { background: var(--feynman); }
+.mcp-toggle input:checked + span::after { transform: translateX(14px); }
+.mcp-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }
+
+/* Mono chrome helper. */
+.mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  letter-spacing: 0.01em;
+}
+
+/* ---- Onboarding / display helpers -----------------------------------
+   Evolved Graph Paper Lab: a bolder, more modern variant of the notebook
+   look for the welcome hero and empty states. Tokens only — no new colors or
+   fonts — so they stay on-palette and theme with the rest of the app. */
+
+/* Small tracked mono label that announces a section. */
+.eyebrow {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--rule);
+}
+
+/* Large display headline for the welcome hero. */
+.hero-title {
+  font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+  font-size: 2.4rem;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Lede paragraph beneath the hero title — clamped to a comfortable measure. */
+.hero-lede {
+  font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  max-width: 38ch;
+}
+
+/* A notebook-page surface: a fresh-paper card with the red margin rule as a
+   2px bar pinned to the left edge — the signature made bolder for the hero. */
+.page-card {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--paper-2);
+  border-radius: 3px;
+  box-shadow: var(--shadow-card);
+}
+.page-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  background: var(--rule);
+  border-radius: 2px;
+}
+
+/* Suggestion chip — clickable, low-key, on-palette. */
+.chip {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  border: 1px solid var(--line);
+  background: var(--paper-2);
+  border-radius: 2px;
+  padding: 0.42em 0.7em;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background-color 0.15s;
+}
+.chip:hover {
+  border-color: color-mix(in oklab, var(--ink) 40%, transparent);
+  color: var(--ink);
+}
+.chip:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Primary filled action button (the existing send/print pattern, factored). */
+.btn-primary {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  background: var(--ink);
+  color: var(--paper-2);
+  border: 0;
+  border-radius: 3px;
+  padding: 0.5em 1em;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-primary:hover { opacity: 0.9; }
+.btn-primary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* ---- Markdown rendered chat content ----
+   Read-first: comfortable line-height and generous block spacing so the
+   model's structured answers (headings, lists, emphasis) read as distinct
+   sections rather than a cramped wall of text. Graph Paper Lab tokens only. */
+.prose-chat {
+  font-size: 1rem;
+  line-height: 1.8;
+}
+.prose-chat > * + * { margin-top: 1em; }
+.prose-chat p { margin: 0; }
+.prose-chat p:first-child { margin-top: 0; }
+.prose-chat p:last-child { margin-bottom: 0; }
+
+/* Headings — clear section hierarchy. h1/h2 carry a hairline rule beneath so
+   a new section is visually announced, not just bolder text. */
+.prose-chat h1, .prose-chat h2, .prose-chat h3, .prose-chat h4 {
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ink);
+  margin: 1.4em 0 0.5em;
+}
+.prose-chat h1 { font-size: 1.38rem; padding-bottom: 0.28em; border-bottom: 1px solid var(--line); }
+.prose-chat h2 { font-size: 1.2rem;  padding-bottom: 0.24em; border-bottom: 1px solid var(--line); }
+.prose-chat h3 { font-size: 1.04rem; }
+.prose-chat h4 { font-size: 0.98rem; color: var(--ink-2); }
+/* The first child of a bubble shouldn't kick off with a big top gap. */
+.prose-chat > h1:first-child,
+.prose-chat > h2:first-child,
+.prose-chat > h3:first-child,
+.prose-chat > h4:first-child { margin-top: 0; }
+
+.prose-chat ul, .prose-chat ol { margin: 0.25em 0; padding-left: 1.5em; }
+.prose-chat li { margin: 0.35em 0; }
+.prose-chat li > ul, .prose-chat li > ol { margin: 0.35em 0; }
+/* Tight lists (no blank lines between items in source) stay a touch tighter. */
+.prose-chat li + li { margin-top: 0.35em; }
+.prose-chat ul { list-style: disc; }
+.prose-chat ol { list-style: decimal; }
+
+/* Horizontal rule — a clean section break on the page grid. */
+.prose-chat hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1.4em 0;
+}
+
+.prose-chat code {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.85em;
+  background: rgba(31, 32, 32, 0.06);
+  padding: 0.1em 0.32em;
+  border-radius: 3px;
+}
+html[data-theme="dark"] .prose-chat code { background: rgba(236, 234, 216, 0.10); }
+.prose-chat pre {
+  background: var(--paper-3);
+  border: 1px solid var(--line);
+  padding: 0.85em 1em;
+  border-radius: 3px;
+  overflow-x: auto;
+  margin: 0.4em 0;
+  font-size: 0.85rem;
+}
+.prose-chat pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.85rem;
+}
+.prose-chat blockquote {
+  border-left: 2px solid var(--rule);
+  padding: 0.1em 0 0.1em 0.95em;
+  color: var(--ink-2);
+  font-style: italic;
+  margin: 0.4em 0;
+}
+.prose-chat a {
+  color: var(--rule);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose-chat table { border-collapse: collapse; margin: 0.4em 0; font-size: 0.92rem; }
+.prose-chat th, .prose-chat td { border: 1px solid var(--line); padding: 0.45em 0.75em; }
+.prose-chat th { background: var(--paper-3); font-weight: 600; text-align: left; }
+/* Emphasis that actually reads: heavier weight + ink so bolded answers pop. */
+.prose-chat strong { font-weight: 700; color: var(--ink); }
+.prose-chat em { font-style: italic; }
+
+/* KaTeX should inherit ink and sit on the line. Inline math gets a little
+   vertical padding so descenders/ascenders don't clip against the line box. */
+.prose-chat .katex { font-size: 1.05em; color: var(--ink); }
+/* Display math ($$…$$) is its own block — give it real breathing room above
+   and below so a stack of derivation steps reads as separate lines, not a
+   cramped wall. Allow horizontal scroll for long equations instead of
+   shrinking them. */
+.prose-chat .katex-display {
+  margin: 1.4em 0;
+  padding: 0.15em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.prose-chat .katex-display > .katex {
+  white-space: nowrap;
+  text-align: left;
+}
+/* Tighten the gap when a display equation directly follows another (a chain
+   of steps) so they group as a sequence rather than drifting apart. */
+.prose-chat .katex-display + .katex-display { margin-top: 0.9em; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #c9c6b6; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #b4b1a1; }
+::-webkit-scrollbar-track { background: transparent; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #3a3b39; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4a4b49; }
+
+/* Focus rings — ink, not browser blue */
+:where(button, a, input, textarea, select):focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+/* Print / Save-as-PDF — for the /print/[id] document page. Strip the app
+   chrome (anything tagged .no-print: back link, print button, code copy
+   buttons), give a clean A4 page with sensible margins and page numbers, and
+   keep headings/code/tables/math from splitting across a page break. Tuned
+   font sizes so a printed document reads like a finished reference, not a
+   chat bubble; tables and code wrap to the page width instead of overflowing. */
+@page {
+  size: A4;
+  margin: 1.6cm 1.8cm 1.8cm 1.8cm;
+  @bottom-right {
+    content: counter(page) " / " counter(pages);
+    font-family: ui-monospace, monospace;
+    font-size: 9pt;
+    color: #8b8d83;
+  }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  html, body { background: #ffffff !important; }
+  .print-sheet { max-width: none; margin: 0; padding: 0; background: #ffffff !important; }
+
+  .prose-chat { font-size: 11pt; line-height: 1.5; color: #1f2020; }
+  .prose-chat p { orphans: 2; widows: 2; }
+
+  /* Document title — large, with a solid rule so page 1 reads as a document. */
+  .prose-chat h1 {
+    font-size: 22pt; line-height: 1.2; margin: 0 0 0.6em;
+    border-bottom: 1.5px solid #1f2020; padding-bottom: 0.3em;
+    break-after: avoid;
+  }
+  .prose-chat h2 { font-size: 15pt; margin-top: 1.3em; break-after: avoid; }
+  .prose-chat h3 { font-size: 12.5pt; break-after: avoid; }
+  .prose-chat h4 { break-after: avoid; }
+
+  .prose-chat pre, .prose-chat table, .prose-chat blockquote, .prose-chat .katex-display { break-inside: avoid; }
+  .prose-chat pre { white-space: pre-wrap; word-break: break-word; font-size: 9.5pt; line-height: 1.4; }
+  .prose-chat code { font-size: 9.5pt; }
+
+  /* Tables span the page and wrap cell text; keep the header shading so rows
+     stay readable (browsers drop backgrounds unless we force exact). */
+  .prose-chat table { width: 100%; font-size: 10pt; }
+  .prose-chat th, .prose-chat td { word-break: break-word; }
+  .prose-chat th {
+    background: #eae8dc !important;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .prose-chat img { max-width: 100%; }
+  .prose-chat a { color: #1f2020; text-decoration: underline; }
+}
+/* Teach-mode whiteboard: items fade-write in as the tutor "writes" them. */
+.board-item {
+  animation: board-in 300ms ease-out;
+}
+.board-item-boxed {
+  outline: 2px solid var(--rule);
+  outline-offset: 6px;
+  border-radius: 2px;
+}
+@keyframes board-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-item { animation: none; }
+}
+
+/* Handwriting rows: engine svg parked in the row is full-width; the snapshot
+   clone replaces it at the same size. */
+.stroke-text .stroke-row { line-height: 0; }
+.stroke-text .stroke-row svg { display: block; width: 100%; height: auto; }
+.stroke-text .stroke-row svg path { stroke: currentColor !important; fill: currentColor !important; }
+.math-writeon svg { display: block; }
+
+
+/* ---- Teach stage: infinite canvas + floating overlays -------------------
+   Implements design/live-lesson-stitch.png. The board fills the viewport;
+   every control is a frosted card hovering above the paper.
+   --------------------------------------------------------------------- */
+
+.teach-stage {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+.teach-surface {
+  position: absolute;
+  inset: 0;
+  cursor: grab;
+  touch-action: none;
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+.teach-surface.is-panning { cursor: grabbing; }
+.teach-surface.is-selecting { cursor: crosshair; }
+
+.teach-world {
+  position: relative;
+  transform-origin: 0 0;
+  will-change: transform;
+  align-items: flex-start;
+}
+
+.notebook-world {
+  position: relative;
+  box-sizing: border-box;
+  width: 980px;
+  min-height: 1200px;
+  padding: 160px 40px 360px;
+  overflow: visible;
+  /* No page chrome: the canvas is one endless sheet. Edges, page background
+     and shadow made it read as a bounded document ("there's a border"), and
+     the grid seam between page and backdrop broke the infinite illusion. The
+     single grid lives on .teach-surface and tracks the camera transform. */
+}
+
+.select-rect {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  border: 1.5px dashed var(--rule);
+  background: color-mix(in srgb, var(--rule) 6%, transparent);
+  border-radius: 3px;
+}
+
+/* Board content ------------------------------------------------------- */
+
+.board-world {
+  width: 900px;
+  color: var(--ink);
+}
+/* Mathwriter's main ink is a stable dark raster. Theme it at paint time so
+   cached handwriting cannot disappear when dark mode is applied later. */
+.handwrite-ink-raster { filter: none; }
+html[data-theme="dark"] .handwrite-ink-raster {
+  filter: invert(94%) sepia(8%) saturate(315%) hue-rotate(8deg) brightness(99%) contrast(89%);
+}
+html[data-theme="dark"] .board-world { color: var(--ink); }
+.board-section { display: flex; flex-direction: column; align-items: flex-start; }
+.board-divider {
+  width: 100%;
+  height: 1px;
+  margin: 56px 0 40px;
+  background: linear-gradient(90deg, transparent, var(--line), transparent);
+}
+.board-item { animation: board-in 300ms ease-out; }
+/* Role-aware rhythm — headings breathe, equations get air, notes tuck in.
+   Tightened with the smaller hand (ROLE_SCALE): notebook lines, not posters. */
+.board-item-write + .board-item-write { margin-top: 18px; }
+.board-item-write { margin-top: 12px; }
+.board-item-heading, .board-item-write:first-child { margin-top: 0; }
+.board-item-mark { margin-top: 5px; margin-left: 22px; }
+.board-item-code { margin-top: 18px; }
+.board-item-latex { margin-top: 26px; }
+.board-item-visual_scene { margin-top: 34px; }
+.board-item-boxed {
+  outline: 2px solid var(--rule);
+  outline-offset: 10px;
+  border-radius: 3px;
+}
+
+/* Overlay chrome ------------------------------------------------------ */
+
+.overlay { position: fixed; z-index: 40; }
+
+.glass {
+  background: color-mix(in srgb, var(--paper-2) 82%, transparent);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  box-shadow: 0 8px 32px rgba(31, 32, 32, 0.07);
+}
+html[data-theme="dark"] .glass {
+  background: color-mix(in srgb, var(--paper-2) 94%, transparent);
+  border-color: color-mix(in srgb, var(--ink-3) 35%, transparent);
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.3);
+}
+
+/* Visible hand-off between Send and synchronized lesson playback. This is
+   essential on iPad, where the transcript drawer starts closed. */
+.teach-reply-state {
+  top: max(108px, calc(env(safe-area-inset-top) + 94px));
+  left: 50%;
+  width: min(560px, calc(100vw - 420px));
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  color: var(--ink);
+  pointer-events: none;
+}
+.teach-reply-state.is-error {
+  border-color: color-mix(in srgb, var(--rule) 55%, var(--line));
+}
+.teach-reply-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--feynman);
+  background: color-mix(in srgb, var(--feynman) 10%, var(--paper-3));
+}
+.teach-reply-state:not(.is-error):not(.has-preview) .teach-reply-icon .material-symbols-outlined {
+  animation: director-spin 1.2s linear infinite;
+}
+.teach-reply-state.is-error .teach-reply-icon {
+  color: var(--rule);
+  background: color-mix(in srgb, var(--rule) 10%, var(--paper-3));
+}
+.teach-reply-copy { min-width: 0; }
+.teach-reply-copy strong {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.teach-reply-copy p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.teach-reply-retry {
+  align-self: center;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper-2);
+  font: 10px var(--font-mono);
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.breadcrumb {
+  top: max(22px, env(safe-area-inset-top));
+  left: max(22px, env(safe-area-inset-left));
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px; letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+.crumb-link { transition: color 120ms; }
+.crumb-link:hover { color: var(--ink); text-decoration: underline; }
+.crumb-current { color: var(--ink); font-weight: 500; }
+
+.toolbar { top: max(20px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); }
+.toolbar-pill {
+  display: flex; align-items: center; gap: 22px;
+  padding: 8px 20px; border-radius: 999px;
+}
+.toolbar-brand {
+  display: flex; align-items: center; gap: 12px;
+  padding-right: 20px;
+  border-right: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.brand-mark {
+  font-family: var(--font-mono);
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--ink-2);
+}
+.status-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 7px;
+  background: color-mix(in srgb, var(--paper-3) 80%, transparent);
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--ink-3);
+}
+.status-writing { color: var(--rule); }
+.status-writing .material-symbols-outlined { animation: pen-bob 1.1s ease-in-out infinite; }
+.director-status { white-space: nowrap; }
+.director-planning .material-symbols-outlined { animation: director-spin 1.2s linear infinite; }
+.director-model { color: var(--feynman); }
+.director-fallback, .director-unavailable { color: var(--ink-3); }
+@keyframes director-spin { to { transform: rotate(360deg); } }
+@keyframes pen-bob { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-2px) } }
+
+.toolbar-tools { display: flex; align-items: center; gap: 6px; }
+.tool {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  color: var(--ink-3);
+  transition: color 120ms;
+}
+.tool:hover { color: var(--ink); }
+.tool-dot {
+  width: 38px; height: 38px; border-radius: 999px;
+  display: grid; place-items: center;
+  transition: background 120ms;
+}
+.tool:hover .tool-dot { background: color-mix(in srgb, var(--paper-3) 70%, transparent); }
+.tool.is-active { color: var(--ink); }
+.tool.is-active .tool-dot { background: var(--paper-3); }
+.tool-label {
+  position: absolute; top: 40px;
+  font-size: 9.5px; letter-spacing: 0.06em;
+  opacity: 0; transition: opacity 120ms; white-space: nowrap;
+}
+.tool:hover .tool-label, .tool.is-active .tool-label { opacity: 1; }
+
+/* Transcript ---------------------------------------------------------- */
+
+.transcript {
+  top: 50%; right: env(safe-area-inset-right);
+  width: 340px; height: 78vh;
+  /* Near-opaque: board writing that reaches under the drawer must not ghost
+     through the glass — it reads as overlapping handwriting. */
+  background: color-mix(in srgb, var(--paper-2) 96%, transparent);
+  transform: translateY(-50%);
+  border-radius: 18px 0 0 18px;
+  border-right: none;
+  display: flex; flex-direction: column;
+  transition: transform 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.transcript.is-collapsed { transform: translate(100%, -50%); }
+.transcript-handle {
+  position: absolute; left: -18px; top: 50%;
+  width: 34px; height: 62px;
+  transform: translateY(-50%);
+  border-radius: 10px 0 0 10px;
+  display: grid; place-items: center;
+  color: var(--ink-3);
+}
+.transcript-handle:hover { color: var(--ink); }
+.transcript-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
+}
+.transcript-head h2 { font-family: var(--font-ui); font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
+.transcript-head p { margin-top: 2px; font-size: 10px; color: var(--ink-3); letter-spacing: 0.05em; }
+.transcript-body {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 16px;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+.transcript-body::-webkit-scrollbar { display: none; }
+.turn { display: flex; gap: 9px; }
+.avatar {
+  width: 24px; height: 24px; flex: none;
+  border-radius: 999px; display: grid; place-items: center;
+  background: var(--paper-3); border: 1px solid var(--line);
+  font-size: 8.5px; color: var(--ink-2);
+}
+.avatar-user { background: var(--ink); color: var(--paper-2); }
+.turn p {
+  font-family: var(--font-ui);
+  font-size: 13px; line-height: 1.55;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+.turn-user p { color: var(--ink); }
+.turn-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 7px; }
+.transcript-speech,
+.transcript-user-message {
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 10px 10px 10px 3px;
+  background: color-mix(in srgb, var(--paper-3) 70%, transparent);
+  transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+}
+.transcript-user-message {
+  border-radius: 10px 10px 3px 10px;
+  background: color-mix(in srgb, var(--feynman) 10%, var(--paper-2));
+}
+.transcript-part.is-delivered { opacity: 0.78; }
+.transcript-part.is-current {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--rule) 75%, var(--line));
+  background: color-mix(in srgb, var(--rule) 10%, var(--paper-2));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rule) 10%, transparent);
+}
+html[data-theme="dark"] .transcript-speech,
+html[data-theme="dark"] .transcript-user-message { color: var(--ink); }
+.step-chip {
+  align-self: flex-start;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  background: color-mix(in srgb, var(--paper-3) 60%, transparent);
+  font-size: 9.5px; color: var(--ink-2);
+}
+.visual-step-chip { border-color: color-mix(in srgb, var(--feynman) 44%, var(--line)); }
+
+/* Composer ------------------------------------------------------------ */
+
+.composer {
+  bottom: max(30px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+  width: min(680px, calc(100vw - 420px));
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.selection-chip {
+  max-width: 100%;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 12px; border-radius: 999px;
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--rule);
+  border-color: color-mix(in srgb, var(--rule) 45%, transparent);
+}
+.voice-error-chip {
+  color: var(--rule);
+  text-align: left;
+}
+.composer-pill {
+  width: 100%;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px; border-radius: 999px;
+  box-shadow: 0 12px 40px rgba(31, 32, 32, 0.1);
+}
+.composer-mic, .composer-send {
+  width: 44px; height: 44px; flex: none;
+  border-radius: 999px; display: grid; place-items: center;
+  transition: background 120ms, opacity 120ms;
+}
+.composer-mic { background: var(--paper-3); color: var(--ink-2); }
+.composer-mic:hover { color: var(--ink); }
+.composer-mic.is-live { background: var(--rule); color: var(--paper-2); }
+.composer-send { background: var(--ink); color: var(--paper-2); }
+.composer-send:disabled { opacity: 0.35; }
+.composer-input {
+  flex: 1; min-width: 0; background: transparent; border: none; outline: none;
+  font-size: 15px; color: var(--ink); padding: 0 6px;
+}
+.composer-input::placeholder { color: var(--ink-3); }
+
+/* Zoom ---------------------------------------------------------------- */
+
+.zoombar {
+  bottom: max(30px, env(safe-area-inset-bottom));
+  right: max(26px, env(safe-area-inset-right));
+}
+.zoom-pill {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 5px; border-radius: 999px;
+}
+.zoom-pill button {
+  width: 36px; height: 36px; border-radius: 999px;
+  display: grid; place-items: center; color: var(--ink-3);
+  transition: background 120ms, color 120ms;
+}
+.zoom-pill button:hover { background: color-mix(in srgb, var(--paper-3) 70%, transparent); color: var(--ink); }
+.zoom-level {
+  font-size: 10px; color: var(--ink-2); padding: 5px 0; width: 100%; text-align: center;
+  border-block: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
+}
+.zoom-fit { margin-top: 4px; }
+
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal; font-style: normal;
+  font-size: 20px; line-height: 1;
+  display: inline-block; vertical-align: middle;
+  font-variation-settings: "FILL" 0, "wght" 300, "GRAD" 0, "opsz" 24;
+}
+
+@media (max-width: 1199px) {
+  .toolbar {
+    top: calc(max(20px, env(safe-area-inset-top)) + 54px);
+    left: max(14px, env(safe-area-inset-left));
+    width: calc(100vw - 28px - env(safe-area-inset-left) - env(safe-area-inset-right));
+    transform: none;
+  }
+  .toolbar-pill {
+    max-width: 100%;
+    gap: 8px;
+    padding: 7px 10px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .toolbar-pill::-webkit-scrollbar { display: none; }
+  .toolbar-brand { display: none; }
+  .tool-label { display: none; }
+  .transcript {
+    width: 320px;
+    height: calc(100dvh - 230px);
+    max-height: 760px;
+    top: calc(max(20px, env(safe-area-inset-top)) + 130px);
+    transform: none;
+  }
+  .transcript.is-collapsed { transform: translateX(100%); }
+  .composer {
+    left: calc(50% - 160px);
+    width: min(680px, calc(100vw - 360px));
+  }
+  .zoombar { display: none; }
+  .teach-reply-state {
+    top: calc(max(20px, env(safe-area-inset-top)) + 118px);
+    width: min(560px, calc(100vw - 40px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+  }
+}
+
+@media (max-width: 700px) {
+  .breadcrumb { max-width: calc(100vw - 44px); }
+  .crumb-current { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .transcript {
+    width: calc(100vw - 28px - env(safe-area-inset-left) - env(safe-area-inset-right));
+    height: calc(100dvh - 235px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  .composer {
+    left: 50%;
+    width: calc(100vw - 28px - env(safe-area-inset-left) - env(safe-area-inset-right));
+  }
+  .composer-pill { padding: 6px; }
+  .teach-reply-state { grid-template-columns: auto minmax(0, 1fr); }
+  .teach-reply-retry {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+.voice-select {
+  max-width: 108px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  background: color-mix(in srgb, var(--paper-3) 55%, transparent);
+  font-size: 10.5px;
+  color: var(--ink-2);
+  outline: none;
+}
+.voice-select:hover { color: var(--ink); }
+
+/* Margin asides: an answer written beside the spot the student marked. */
+.board-world { position: relative; }
+.board-aside {
+  position: absolute;
+  padding-left: 18px;
+  border-left: 2px solid color-mix(in srgb, var(--rule) 45%, transparent);
+  /* The repair pass nudges asides via transform; ease it so a fix reads as
+     the teacher sliding the note, not content teleporting. */
+  transition: transform 320ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.board-aside .board-item { margin-top: 14px; }
+.board-aside .board-item:first-child { margin-top: 0; }
+.board-aside .handwrite canvas,
+.board-aside .code-board { max-width: 100% !important; height: auto !important; }
+.board-aside-tick {
+  position: absolute;
+  left: -2px; top: 0;
+  width: 26px; height: 2px;
+  background: color-mix(in srgb, var(--rule) 45%, transparent);
+}
+
+/* Visual-director scenes. These use semantic IDs instead of concrete art;
+   `data-asset-id` becomes the lookup key when the user's dataset arrives. */
+.visual-scene {
+  width: min(850px, calc(100vw - 150px));
+  padding: 22px;
+  border: 1px solid color-mix(in srgb, var(--feynman) 34%, var(--line));
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--feynman) 10%, transparent), transparent 34%),
+    color-mix(in srgb, var(--paper-2) 94%, transparent);
+  box-shadow: 0 16px 42px color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+.visual-scene-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
+.visual-scene-head > .material-symbols-outlined { color: var(--feynman); font-size: 28px; }
+.visual-kicker { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--feynman); }
+.visual-scene-head h3 { margin-top: 2px; max-width: 62ch; font-size: 16px; line-height: 1.35; font-weight: 600; }
+.visual-assets { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.visual-asset {
+  min-width: 130px; max-width: 220px; display: grid; grid-template-columns: auto 1fr; gap: 2px 9px; align-items: center;
+  padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px;
+  background: color-mix(in srgb, var(--paper-3) 66%, transparent);
+}
+.visual-asset .material-symbols-outlined { grid-row: 1 / 3; color: var(--feynman); font-size: 27px; }
+.visual-asset strong { overflow: hidden; text-overflow: ellipsis; font-size: 12px; white-space: nowrap; }
+.visual-asset small { overflow: hidden; text-overflow: ellipsis; font: 8px var(--font-mono); color: var(--ink-3); white-space: nowrap; }
+.visual-asset-large, .visual-asset-hero { min-width: 190px; }
+.visual-architecture { margin-top: 13px; padding: 14px; border: 1px solid color-mix(in srgb, var(--line) 80%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--paper) 74%, transparent); }
+.visual-architecture figcaption { margin: 0 4px 8px; font-size: 13px; font-weight: 600; }
+.visual-architecture svg { display: block; width: 100%; height: auto; overflow: visible; }
+.visual-edges path { fill: none; stroke: var(--feynman); stroke-width: 1.7; opacity: 0.84; }
+.visual-edges marker path { fill: var(--feynman); stroke: none; }
+.visual-edge-label { fill: var(--ink-2); font: 9px var(--font-mono); paint-order: stroke; stroke: var(--paper); stroke-width: 4px; stroke-linejoin: round; }
+.visual-node { fill: color-mix(in srgb, var(--paper-2) 92%, var(--feynman)); stroke: color-mix(in srgb, var(--feynman) 55%, var(--line)); stroke-width: 1.4; }
+.visual-node-input { fill: color-mix(in srgb, var(--feynman) 11%, var(--paper-2)); }
+.visual-node-output { fill: color-mix(in srgb, #4e9a68 12%, var(--paper-2)); }
+.visual-node-decision { fill: color-mix(in srgb, var(--rule) 10%, var(--paper-2)); stroke: color-mix(in srgb, var(--rule) 45%, var(--line)); }
+.visual-node-store { stroke-dasharray: 5 3; }
+.visual-nodes text { fill: var(--ink); font: 11px var(--font-mono); font-weight: 600; }
+.visual-relations { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 9px; margin-top: 13px; }
+.visual-label, .visual-relation { min-width: 0; padding: 9px 11px; border-left: 3px solid var(--feynman); border-radius: 8px; background: color-mix(in srgb, var(--paper-3) 58%, transparent); }
+.visual-label { display: flex; flex-direction: column; }
+.visual-label span { font: 8px var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); }
+.visual-label strong { font-size: 12px; }
+.visual-relation { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; }
+.visual-relation code { overflow: hidden; text-overflow: ellipsis; font: 9px var(--font-mono); color: var(--ink-2); }
+.visual-relation strong { flex-basis: 100%; font-size: 10px; }
+.visual-tone-warning { border-left-color: #c08a32; }
+.visual-tone-danger { border-left-color: var(--rule); }
+.visual-tone-success { border-left-color: #4e9a68; }
+.visual-scene-notes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 13px; }
+.visual-scene-notes span { padding: 3px 7px; border: 1px dashed var(--line); border-radius: 999px; font: 8px var(--font-mono); color: var(--ink-3); }
+
+html[data-theme="dark"] .visual-scene,
+html[data-theme="dark"] .visual-architecture { color: var(--ink); }
+
+@media (max-width: 900px) {
+  .visual-scene { width: min(780px, calc(100vw - 60px)); }
+}
+
+/* Student pen (ink layer + toolbar pen controls) */
+.ink-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+.teach-surface.is-inking { cursor: crosshair; touch-action: none; }
+.pen-controls { display: inline-flex; align-items: center; gap: 6px; margin: 0 2px; }
+.pen-swatch {
+  width: 18px; height: 18px; border-radius: 999px;
+  border: 2px solid transparent;
+  transition: transform 100ms, border-color 100ms;
+}
+.pen-swatch.is-active { border-color: var(--ink); transform: scale(1.15); }
+.pen-swatch-red { background: var(--rule); }
+.pen-swatch-blue { background: var(--feynman); }
+.pen-swatch-ink { background: var(--ink); }
+.pen-undo {
+  font-size: 12px; color: var(--ink-3);
+  padding: 2px 6px; border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.pen-undo:hover { color: var(--ink); }
+.pen-undo.is-active-tool { color: var(--paper-2); background: var(--rule); border-color: var(--rule); }
+.pen-check {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; letter-spacing: 0.02em;
+  color: var(--paper-2); background: var(--feynman);
+  padding: 3px 9px; border-radius: 999px;
+  transition: opacity 120ms;
+}
+.pen-check:hover { opacity: 0.9; }
+.pen-check:disabled { opacity: 0.6; cursor: default; }
+.turn-jumpable { cursor: pointer; border-radius: 8px; transition: background 120ms; }
+.turn-jumpable:hover { background: color-mix(in srgb, var(--paper-3) 45%, transparent); }

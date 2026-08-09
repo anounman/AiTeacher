@@ -1,0 +1,12 @@
+# Core renderer + validator (solve.py / render.py / validate.py)
+pillow==12.2.0
+numpy==2.4.4
+opencv-python==4.13.0.92
+
+# --- Optional: glyph harvesting / OCR / PDF input (extract_*.py, harvest_*.py) ---
+# Uncomment if you need to re-harvest glyphs or ingest PDFs.
+# easyocr==1.7.2
+# pypdfium2==5.8.0
+# pyobjc-core==12.1
+# pyobjc-framework-Quartz==12.1
+# pyobjc-framework-Vision==12.1

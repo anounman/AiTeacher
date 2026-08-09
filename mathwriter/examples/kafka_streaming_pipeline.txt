@@ -1,0 +1,49 @@
+~~Kafka Streaming Pipeline~~
+
+[DRAW]
+TEXT 230,18 "Kafka Cluster" center=true scale=0.7
+RECT 145,28 170,195 fill=light
+TEXT 230,45 "Topic: orders" center=true scale=0.65
+RECT 160,60 140,28
+TEXT 230,74 "Partition 0" center=true scale=0.55
+RECT 160,95 140,28
+TEXT 230,109 "Partition 1" center=true scale=0.55
+RECT 160,130 140,28
+TEXT 230,144 "Partition 2" center=true scale=0.55
+RECT 160,165 140,28
+TEXT 230,179 "Partition 3" center=true scale=0.55
+RECT 15,50 85,30
+TEXT 57,65 "Producer 1" center=true scale=0.6
+RECT 15,110 85,30
+TEXT 57,125 "Producer 2" center=true scale=0.6
+RECT 15,170 85,30
+TEXT 57,185 "Producer 3" center=true scale=0.6
+RECT 370,45 140,90 fill=light
+TEXT 440,60 "Consumer Group A" center=true scale=0.5
+RECT 385,75 50,25
+TEXT 410,88 "C1" center=true scale=0.6
+RECT 445,75 50,25
+TEXT 470,88 "C2" center=true scale=0.6
+RECT 385,105 50,25
+TEXT 410,118 "C3" center=true scale=0.6
+RECT 445,105 50,25
+TEXT 470,118 "C4" center=true scale=0.6
+RECT 370,160 140,75 fill=light
+TEXT 440,175 "Consumer Group B" center=true scale=0.5
+RECT 385,190 50,25
+TEXT 410,203 "C1" center=true scale=0.6
+RECT 445,190 50,25
+TEXT 470,203 "C2" center=true scale=0.6
+RECT 195,355 150,35 fill=light
+TEXT 270,370 "ZooKeeper / KRaft" center=true scale=0.55
+TEXT 270,385 "(metadata)" center=true scale=0.45
+ARROW 100,65 160,74
+ARROW 100,125 160,109
+ARROW 100,185 160,144
+ARROW 315,74 370,75
+ARROW 315,109 370,110
+ARROW 315,144 370,185
+ARROW 315,179 370,210
+LINE 230,223 250,355 style=dashed
+TEXT 258,290 "metadata" center=false scale=0.45
+[/DRAW]

@@ -1,0 +1,30 @@
+~~Cap Theorem~~
+
+[DRAW]
+POLYGON 150,20 40,180 260,180 width=2.5 fill=light
+TEXT 150,10 "C" center=true scale=1.2
+TEXT 150,28 "Consistency" center=true scale=0.55
+TEXT 30,190 "A" center=true scale=1.2
+TEXT 30,208 "Availability" center=true scale=0.55
+TEXT 270,190 "P" center=true scale=1.2
+TEXT 270,208 "Partition Tolerance" center=false scale=0.55
+
+TEXT 95,95 "CA" center=true scale=0.9
+DOT 95,115 r=5
+TEXT 95,135 "single-node DB" center=true scale=0.6
+LINE 95,120 95,128 style=dashed
+
+TEXT 205,95 "CP" center=true scale=0.9
+DOT 205,115 r=5
+TEXT 205,135 "HBase" center=true scale=0.6
+LINE 205,120 205,128 style=dashed
+
+TEXT 150,168 "AP" center=true scale=0.9
+DOT 150,196 r=5
+TEXT 150,214 "Cassandra" center=true scale=0.6
+LINE 150,201 150,209 style=dashed
+
+HIGHLIGHT 80,85 30,20
+HIGHLIGHT 190,85 30,20
+HIGHLIGHT 135,158 30,20
+[/DRAW]

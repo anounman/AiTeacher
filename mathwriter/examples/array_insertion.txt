@@ -1,0 +1,37 @@
+~~Array Insertion~~
+
+[DRAW]
+TEXT 110,20 "Before" center=true scale=0.9
+GRID 10,40 200,40 50,40
+TEXT 35,60 "A" center=true
+TEXT 85,60 "B" center=true
+TEXT 135,60 "D" center=true
+TEXT 185,60 "E" center=true
+TEXT 35,95 "0" center=true scale=0.5
+TEXT 85,95 "1" center=true scale=0.5
+TEXT 135,95 "2" center=true scale=0.5
+TEXT 185,95 "3" center=true scale=0.5
+
+TEXT 385,20 "After" center=true scale=0.9
+GRID 260,40 250,40 50,40
+TEXT 285,60 "A" center=true
+TEXT 335,60 "B" center=true
+TEXT 385,60 "C" center=true
+TEXT 435,60 "D" center=true
+TEXT 485,60 "E" center=true
+TEXT 285,95 "0" center=true scale=0.5
+TEXT 335,95 "1" center=true scale=0.5
+TEXT 385,95 "2" center=true scale=0.5
+TEXT 435,95 "3" center=true scale=0.5
+TEXT 485,95 "4" center=true scale=0.5
+
+HIGHLIGHT 360,40 50,40
+
+CURVE 135,55 285,10 435,55 style=smooth
+TEXT 285,8 "shift" center=true scale=0.5
+CURVE 185,65 335,115 485,65 style=smooth
+TEXT 335,118 "shift" center=true scale=0.5
+
+ARROW 210,60 255,60 head=8 style=smooth
+TEXT 232,50 "insert C" center=true scale=0.5
+[/DRAW]

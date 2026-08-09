@@ -1,0 +1,62 @@
+~~Mapreduce Wordcount~~
+
+[DRAW]
+RECT 20,10 80,30 fill=light
+TEXT 60,25 "Input 1" center=true scale=0.6
+TEXT 60,42 ""the cat sat"" center=true scale=0.45
+RECT 140,10 80,30 fill=light
+TEXT 180,25 "Input 2" center=true scale=0.6
+TEXT 180,42 ""cat on mat"" center=true scale=0.45
+RECT 260,10 80,30 fill=light
+TEXT 300,25 "Input 3" center=true scale=0.6
+TEXT 300,42 ""the mat sat"" center=true scale=0.45
+
+ARROW 60,52 60,72 style=smooth
+ARROW 180,52 180,72 style=smooth
+ARROW 300,52 300,72 style=smooth
+
+RECT 20,75 80,30
+TEXT 60,90 "Mapper 1" center=true scale=0.6
+RECT 140,75 80,30
+TEXT 180,90 "Mapper 2" center=true scale=0.6
+RECT 260,75 80,30
+TEXT 300,90 "Mapper 3" center=true scale=0.6
+
+TEXT 60,118 "(the,1)(cat,1)" center=true scale=0.45
+TEXT 60,128 "(sat,1)" center=true scale=0.45
+TEXT 180,118 "(cat,1)(on,1)" center=true scale=0.45
+TEXT 180,128 "(mat,1)" center=true scale=0.45
+TEXT 300,118 "(the,1)(mat,1)" center=true scale=0.45
+TEXT 300,128 "(sat,1)" center=true scale=0.45
+
+ARROW 60,138 60,158 style=wobbly
+ARROW 180,138 180,158 style=wobbly
+ARROW 300,138 300,158 style=wobbly
+
+RECT 20,160 320,40 fill=light
+TEXT 180,175 "Shuffle & Sort" center=true scale=0.7
+TEXT 180,188 "group by key" center=true scale=0.55
+
+TEXT 100,208 "(cat,[1,1])" center=true scale=0.5
+TEXT 180,208 "(mat,[1,1])" center=true scale=0.5
+TEXT 260,208 "(the,[1,1])" center=true scale=0.5
+
+ARROW 100,218 100,238 style=smooth
+ARROW 180,218 180,238 style=smooth
+ARROW 260,218 260,238 style=smooth
+
+RECT 50,240 100,30
+TEXT 100,255 "Reducer A" center=true scale=0.6
+RECT 210,240 100,30
+TEXT 260,255 "Reducer B" center=true scale=0.6
+
+ARROW 100,270 100,290 style=smooth
+ARROW 260,270 260,290 style=smooth
+
+RECT 50,290 100,30 fill=light
+TEXT 100,305 "Output A" center=true scale=0.6
+TEXT 100,322 "cat 2, mat 2" center=true scale=0.45
+RECT 210,290 100,30 fill=light
+TEXT 260,305 "Output B" center=true scale=0.6
+TEXT 260,322 "the 2, sat 2" center=true scale=0.45
+[/DRAW]

@@ -1,0 +1,21 @@
+~~Logic Not Gate~~
+
+[DRAW]
+LINE 10,40 60,40 width=2
+POLYGON 60,15 60,65 140,40 fill=light width=2
+TEXT 95,40 "1" center=true scale=0.6
+CIRCLE 148,40 8 width=2
+LINE 156,40 210,40 width=2
+TEXT 30,28 "A=1" center=true scale=0.7
+TEXT 185,28 "Y=0" center=true scale=0.7
+TEXT 100,75 "NOT Gate (Inverter)" center=true scale=0.6
+GRID 10,100 120,90 60,30 width=2
+TEXT 40,115 "A" center=true scale=0.7
+TEXT 100,115 "Y" center=true scale=0.7
+TEXT 40,145 "0" center=true scale=0.7
+TEXT 100,145 "1" center=true scale=0.7
+TEXT 40,175 "1" center=true scale=0.7
+TEXT 100,175 "0" center=true scale=0.7
+HIGHLIGHT 10,150 120,30
+TEXT 145,115 "Truth Table" center=false scale=0.6
+[/DRAW]

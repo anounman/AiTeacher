@@ -1,0 +1,49 @@
+~~Relational Schema Example~~
+
+[DRAW]
+RECT 20,30 160,91 width=2
+RECT 20,30 160,25 fill=light width=2
+TEXT 100,43 "Customers" center=true scale=0.75
+TEXT 30,72 "customer_id  PK" scale=0.6
+TEXT 30,94 "name" scale=0.6
+TEXT 30,116 "email" scale=0.6
+
+RECT 220,30 160,113 width=2
+RECT 220,30 160,25 fill=light width=2
+TEXT 300,43 "Orders" center=true scale=0.75
+TEXT 230,72 "order_id  PK" scale=0.6
+TEXT 230,94 "customer_id  FK" scale=0.6
+TEXT 230,116 "order_date" scale=0.6
+TEXT 230,138 "total" scale=0.6
+
+RECT 220,180 160,113 width=2
+RECT 220,180 160,25 fill=light width=2
+TEXT 300,193 "Order_Items" center=true scale=0.75
+TEXT 230,222 "item_id  PK" scale=0.6
+TEXT 230,244 "order_id  FK" scale=0.6
+TEXT 230,266 "product_id  FK" scale=0.6
+TEXT 230,288 "quantity" scale=0.6
+
+RECT 420,30 160,91 width=2
+RECT 420,30 160,25 fill=light width=2
+TEXT 500,43 "Products" center=true scale=0.75
+TEXT 430,72 "product_id  PK" scale=0.6
+TEXT 430,94 "name" scale=0.6
+TEXT 430,116 "price" scale=0.6
+
+PATH 220,94 200,94 200,72 180,72 width=2 style=smooth
+TEXT 188,86 "1:N" center=true scale=0.5
+
+PATH 220,244 200,244 200,72 220,72 width=2 style=smooth
+TEXT 188,158 "1:N" center=true scale=0.5
+
+PATH 380,266 400,266 400,72 420,72 width=2 style=smooth
+TEXT 412,169 "1:N" center=true scale=0.5
+
+DOT 180,72 r=3
+DOT 220,94 r=3
+DOT 220,72 r=3
+DOT 220,244 r=3
+DOT 380,266 r=3
+DOT 420,72 r=3
+[/DRAW]

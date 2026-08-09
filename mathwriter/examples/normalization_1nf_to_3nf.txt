@@ -1,0 +1,82 @@
+~~Normalization 1Nf To 3Nf~~
+
+[DRAW]
+TEXT 95,20 "1NF" center=true scale=0.8
+TEXT 310,20 "2NF" center=true scale=0.8
+TEXT 535,20 "3NF" center=true scale=0.8
+
+RECT 10,35 170,105 fill=light
+TEXT 95,48 "StudentCourses" center=true scale=0.6
+LINE 10,58 180,58
+TEXT 20,72 "student_id (PK)" scale=0.5
+TEXT 20,87 "name" scale=0.5
+TEXT 20,102 "course1" scale=0.5
+TEXT 20,117 "course2" scale=0.5
+TEXT 20,132 "course3" scale=0.5
+HIGHLIGHT 10,95 170,45
+
+RECT 230,40 160,60 fill=light
+TEXT 310,53 "Students" center=true scale=0.6
+LINE 230,63 390,63
+TEXT 240,77 "student_id (PK)" scale=0.5
+TEXT 240,92 "name" scale=0.5
+
+RECT 230,120 160,60 fill=light
+TEXT 310,133 "Courses" center=true scale=0.6
+LINE 230,143 390,143
+TEXT 240,157 "course_id (PK)" scale=0.5
+TEXT 240,172 "title" scale=0.5
+
+RECT 230,200 160,60 fill=light
+TEXT 310,213 "Enrollments" center=true scale=0.6
+LINE 230,223 390,223
+TEXT 240,237 "student_id (FK)" scale=0.5
+TEXT 240,252 "course_id (FK)" scale=0.5
+
+RECT 450,40 170,60 fill=light
+TEXT 535,53 "Students" center=true scale=0.6
+LINE 450,63 620,63
+TEXT 460,77 "student_id (PK)" scale=0.5
+TEXT 460,92 "name" scale=0.5
+
+RECT 450,120 170,75 fill=light
+TEXT 535,133 "Courses" center=true scale=0.6
+LINE 450,143 620,143
+TEXT 460,157 "course_id (PK)" scale=0.5
+TEXT 460,172 "title" scale=0.5
+TEXT 460,187 "dept_id (FK)" scale=0.5
+
+RECT 450,215 170,60 fill=light
+TEXT 535,228 "Enrollments" center=true scale=0.6
+LINE 450,238 620,238
+TEXT 460,252 "student_id (FK)" scale=0.5
+TEXT 460,267 "course_id (FK)" scale=0.5
+
+RECT 450,295 170,60 fill=light
+TEXT 535,308 "Departments" center=true scale=0.6
+LINE 450,318 620,318
+TEXT 460,332 "dept_id (PK)" scale=0.5
+TEXT 460,347 "dept_name" scale=0.5
+
+ARROW 180,70 228,70 head=8
+ARROW 180,95 228,150 head=8
+ARROW 180,120 228,230 head=8
+
+ARROW 390,70 448,70 head=8
+ARROW 390,150 448,150 head=8
+ARROW 390,230 448,245 head=8
+ARROW 535,195 535,293 head=8
+
+TEXT 204,50 "split" center=true scale=0.4
+TEXT 419,138 "add dept_id" center=true scale=0.4
+TEXT 548,240 "extract" center=true scale=0.4
+TEXT 548,252 "dept info" center=true scale=0.4
+
+TEXT 95,160 "Non-atomic" center=true scale=0.45
+TEXT 95,172 "repeating" center=true scale=0.45
+TEXT 95,184 "groups" center=true scale=0.45
+TEXT 310,280 "Remove partial" center=true scale=0.45
+TEXT 310,292 "dependencies" center=true scale=0.45
+TEXT 535,375 "Remove transitive" center=true scale=0.45
+TEXT 535,387 "dependencies" center=true scale=0.45
+[/DRAW]

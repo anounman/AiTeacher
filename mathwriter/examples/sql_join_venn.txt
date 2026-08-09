@@ -1,0 +1,52 @@
+~~Sql Join Venn~~
+
+[DRAW]
+TEXT 320,12 "SQL JOINs — Visual Guide" center=true scale=0.9
+
+// === INNER JOIN (top-left) ===
+TEXT 125,48 "INNER JOIN" center=true scale=0.7
+HIGHLIGHT 110,74 30,72
+CIRCLE 90,110 50
+CIRCLE 160,110 50
+TEXT 90,85 "Employees" center=true scale=0.42
+TEXT 160,85 "Departments" center=true scale=0.42
+TEXT 125,112 "dept_id" center=true scale=0.38
+TEXT 125,128 "match" center=true scale=0.38
+TEXT 125,180 "matched rows only" center=true scale=0.5
+
+// === LEFT JOIN (top-right) ===
+TEXT 445,48 "LEFT JOIN" center=true scale=0.7
+HIGHLIGHT 362,62 96,96
+CIRCLE 410,110 50
+CIRCLE 480,110 50
+TEXT 410,85 "Employees" center=true scale=0.42
+TEXT 480,85 "Departments" center=true scale=0.42
+TEXT 445,112 "dept_id" center=true scale=0.38
+TEXT 445,128 "match" center=true scale=0.38
+TEXT 445,180 "all employees + matches" center=true scale=0.5
+
+// === RIGHT JOIN (bottom-left) ===
+TEXT 125,248 "RIGHT JOIN" center=true scale=0.7
+HIGHLIGHT 112,282 96,96
+CIRCLE 90,330 50
+CIRCLE 160,330 50
+TEXT 90,305 "Employees" center=true scale=0.42
+TEXT 160,305 "Departments" center=true scale=0.42
+TEXT 125,332 "dept_id" center=true scale=0.38
+TEXT 125,348 "match" center=true scale=0.38
+TEXT 125,400 "all departments + matches" center=true scale=0.5
+
+// === FULL OUTER JOIN (bottom-right) ===
+TEXT 445,248 "FULL OUTER JOIN" center=true scale=0.7
+HIGHLIGHT 362,282 166,96
+CIRCLE 410,330 50
+CIRCLE 480,330 50
+TEXT 410,305 "Employees" center=true scale=0.42
+TEXT 480,305 "Departments" center=true scale=0.42
+TEXT 445,332 "dept_id" center=true scale=0.38
+TEXT 445,348 "match" center=true scale=0.38
+TEXT 445,400 "all rows from both tables" center=true scale=0.5
+
+// Bottom note
+TEXT 320,430 "Join Key: department_id   |   Yellow = included rows" center=true scale=0.55
+[/DRAW]

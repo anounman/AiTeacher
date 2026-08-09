@@ -1,0 +1,35 @@
+~~Singly Linked List~~
+
+[DRAW]
+TEXT 60,25 "head" center=true scale=0.8
+ARROW 60,35 60,55 head=8
+
+RECT 30,60 60,30
+LINE 70,60 70,90
+TEXT 50,75 "10" center=true
+DOT 80,75 r=3
+
+ARROW 90,75 130,75 head=8
+
+RECT 130,60 60,30
+LINE 170,60 170,90
+TEXT 150,75 "20" center=true
+DOT 180,75 r=3
+
+ARROW 190,75 230,75 head=8
+
+RECT 230,60 60,30
+LINE 270,60 270,90
+TEXT 250,75 "30" center=true
+DOT 280,75 r=3
+
+ARROW 290,75 330,75 head=8
+
+RECT 330,60 60,30
+LINE 370,60 370,90
+TEXT 350,75 "null" center=true scale=0.55
+LINE 372,64 388,86
+LINE 388,64 372,86
+
+TEXT 200,120 "Singly Linked List" center=true scale=0.7
+[/DRAW]
