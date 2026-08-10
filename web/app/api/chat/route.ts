@@ -143,6 +143,27 @@ function attachmentsForTurn(
 // the parts: {status, reasoning, text, error, done}. Persists per `action`
 // before streaming and the assistant reply (upsert under assistantMessageId)
 // in onFinish. Honors req.signal so a client stop cancels generation.
+// The teaching agent lives in the teacher service. Returns null on any
+// failure — a lesson the student is waiting for must not die because a
+// neighbouring process is restarting.
+async function fetchAgentLesson(projectId: string, question: string): Promise<string | null> {
+  const base = process.env.TEACHER_URL ?? "http://127.0.0.1:8900";
+  try {
+    const res = await fetch(`${base}/agents/teach`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, workspaceId: projectId }),
+      signal: AbortSignal.timeout(6 * 60_000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { markdown?: string };
+    const markdown = data.markdown?.trim();
+    return markdown ? markdown : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   let body: ChatBody;
   try {
@@ -393,7 +414,15 @@ export async function POST(req: Request) {
           }
         : {}),
       abortSignal: req.signal,
-      onFinish: ({ text, usage }) => {
+      onFinish: ({ text, usage }) => persistReply(text, usage?.outputTokens),
+    });
+
+    // Extracted so the deepagents teaching path (below) persists a lesson
+    // exactly the way the streaming path does — same sanitizing, same token
+    // accounting, same background reflection. Two persist paths that drift
+    // would show up as messages that reload differently than they streamed.
+    const persistReply = (text: string, completionTokens?: number): void => {
+      {
         // An empty finish (reasoning ate the budget, or a tool loop never
         // produced text) must not overwrite/persist an empty bubble — the
         // stream layer below retries once instead.
@@ -402,7 +431,6 @@ export async function POST(req: Request) {
           // Prefer the provider's real completion token count when it reports
           // one; fall back to our estimate. (Ollama doesn't always populate
           // usage, so the estimate keeps the per-message + global counts honest.)
-          const completionTokens = usage?.outputTokens;
           const tokens =
             typeof completionTokens === "number" && completionTokens > 0
               ? completionTokens
@@ -419,8 +447,9 @@ export async function POST(req: Request) {
             assistantText: reply,
           });
         }
-      },
-    });
+      }
+    };
+
     // Teach turns are LATENCY-critical and always win the effort decision: a
     // "check my work" message carries the vision transcription (>400 chars),
     // which tripped the complex heuristic and silently escalated a quick
@@ -482,6 +511,23 @@ export async function POST(req: Request) {
           if (contextBlock) send({ type: "status", phase: "reading-materials" });
           else if (document) send({ type: "status", phase: "drafting-document" });
           else send({ type: "status", phase: "thinking" });
+
+          // Teaching plane (ARCHITECTURE_V2 §3). Off unless TEACH_AGENT=1:
+          // swapping the tutor a student talks to is gated on the scorecard.
+          // Only whole lessons — an interruption needs the live board state,
+          // which the agent does not receive yet.
+          if (process.env.TEACH_AGENT === "1" && lessonTurn) {
+            const lesson = await fetchAgentLesson(conv.project_id ?? "", lastUserContent);
+            if (lesson) {
+              send({ type: "text", delta: lesson });
+              persistReply(lesson);
+              send({ type: "done" });
+              controller.close();
+              return;
+            }
+            // Unreachable or empty: fall through to the in-process model
+            // rather than failing a lesson the student is waiting for.
+          }
 
           const gotText = await pump(result);
           // Empty finish → one silent retry at low reasoning effort (maximum
