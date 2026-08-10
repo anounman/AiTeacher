@@ -214,6 +214,22 @@ export function TeachStage({
   const [directedScenes, setDirectedScenes] = useState<DirectedScene[]>([]);
   const [directorStatus, setDirectorStatus] = useState<DirectorStatus>("idle");
   const [draft, setDraft] = useState("");
+  const [chromeHidden, setChromeHidden] = useState(false);
+
+  // "h" toggles all floating chrome so the canvas reads as a clean notebook
+  // page. Pointer input is unaffected — pen and pan still work over the full
+  // sheet. A thin floating toggle stays so the student can come back.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+      if (e.key === "h" || e.key === "H") {
+        e.preventDefault();
+        setChromeHidden((h) => !h);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const [penMode, setPenMode] = useState(false);
   const [penColor, setPenColor] = useState<InkColor>("red");
@@ -1202,7 +1218,18 @@ export function TeachStage({
   }, [baseEntries, liveEntries, directedScenes, liveKey]);
 
   return (
-    <div className="teach-stage">
+    <div className={`teach-stage ${chromeHidden ? "chrome-hidden" : ""}`}>
+      {/* Chrome toggle — always visible so the student can bring controls back. */}
+      <button
+        type="button"
+        className="overlay chrome-toggle glass"
+        onClick={() => setChromeHidden((h) => !h)}
+        title={chromeHidden ? "Show controls (H)" : "Hide controls (H)"}
+        aria-label={chromeHidden ? "Show controls" : "Hide controls"}
+      >
+        <Icon name={chromeHidden ? "dock_to_right" : "dock_to_left"} className="text-[18px]" />
+      </button>
+
       {/* Paper + world */}
       <TransformWrapper
         ref={transformRef}
@@ -1278,7 +1305,7 @@ export function TeachStage({
           drawer is closed, then let the synchronized performance take over. */}
       {(streaming || error) && (
         <section
-          className={`overlay glass teach-reply-state ${error ? "is-error" : streamedReplyPreview ? "has-preview" : ""}`}
+          className={`overlay glass teach-reply-state is-hideable ${error ? "is-error" : streamedReplyPreview ? "has-preview" : ""}`}
           role={error ? "alert" : "status"}
           aria-live={error ? "assertive" : "polite"}
         >
@@ -1309,7 +1336,7 @@ export function TeachStage({
       )}
 
       {/* Breadcrumb */}
-      <div className="overlay glass breadcrumb">
+      <div className="overlay glass breadcrumb is-hideable">
         <button type="button" onClick={onExit} className="crumb-link" title="Back to chat mode">
           {projectName || "Standalone"}
         </button>
@@ -1318,7 +1345,7 @@ export function TeachStage({
       </div>
 
       {/* Toolbar */}
-      <nav className="overlay toolbar">
+      <nav className="overlay toolbar is-hideable">
         <div className="glass toolbar-pill">
           <div className="toolbar-brand">
             <span className="brand-mark">AiTeacher</span>
@@ -1454,7 +1481,7 @@ export function TeachStage({
       </nav>
 
       {/* Transcript */}
-      <aside className={`overlay glass transcript ${transcriptOpen ? "" : "is-collapsed"}`}>
+      <aside className={`overlay glass transcript is-hideable ${transcriptOpen ? "" : "is-collapsed"}`}>
         <button
           type="button"
           className="transcript-handle glass"
@@ -1487,7 +1514,7 @@ export function TeachStage({
       </aside>
 
       {/* Input */}
-      <div className="overlay composer">
+      <div className="overlay composer is-hideable">
         {micMessage && (
           <div className="glass selection-chip voice-error-chip" role="status">
             <Icon name="info" className="text-[13px]" />
@@ -1554,7 +1581,7 @@ export function TeachStage({
       </div>
 
       {/* Zoom */}
-      <div className="overlay zoombar">
+      <div className="overlay zoombar is-hideable">
         <div className="glass zoom-pill">
           <button type="button" onClick={() => zoomCanvasBy(1.2)} title="Zoom in">
             <Icon name="add" />

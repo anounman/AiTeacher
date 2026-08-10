@@ -133,7 +133,7 @@ export default function SettingsPage() {
 
   if (!config) {
     return (
-      <div className="graph-paper min-h-screen">
+      <div className="graph-paper page-scroll">
         <div className="mx-auto max-w-3xl px-6 py-14">
           <p className="mono mb-2 text-[11px] tracking-[0.2em] text-rule">SETTINGS</p>
           <Skeleton className="h-7 w-64" />
@@ -148,7 +148,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="graph-paper min-h-screen">
+    <div className="graph-paper page-scroll">
       <div className="mx-auto flex max-w-5xl gap-10 px-6 py-14">
         {/* Section rail */}
         <nav className="settings-rail mono" aria-label="Settings sections">

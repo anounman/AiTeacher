@@ -81,6 +81,18 @@ body {
   height: 100dvh;
   min-height: 0;
 }
+
+/* Standalone route scroll. The app shell + chat teach-stage need the body
+   lock (their own internal panes scroll); these full-page routes grow past
+   the viewport and scroll on the body instead. `.page-scroll` is the root
+   of settings/projects/mastery/graph/decks/review. */
+.page-scroll {
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
 .app-header {
   padding-top: max(0.625rem, env(safe-area-inset-top));
   padding-right: max(0.75rem, env(safe-area-inset-right));
@@ -1093,3 +1105,44 @@ html[data-theme="dark"] .visual-architecture { color: var(--ink); }
 .pen-check:disabled { opacity: 0.6; cursor: default; }
 .turn-jumpable { cursor: pointer; border-radius: 8px; transition: background 120ms; }
 .turn-jumpable:hover { background: color-mix(in srgb, var(--paper-3) 45%, transparent); }
+
+/* Hideable chrome — "H" or the floating toggle clears every overlay so the
+   sheet reads as a clean notebook page. The toggle itself stays so the user
+   can bring controls back; pointer/pen input is unaffected. */
+.chrome-toggle {
+  bottom: max(22px, env(safe-area-inset-bottom));
+  left: max(22px, env(safe-area-inset-left));
+  width: 40px; height: 40px;
+  border-radius: 999px;
+  display: grid; place-items: center;
+  color: var(--ink-3);
+  transition: color 120ms, opacity 200ms, transform 200ms;
+  z-index: 60;
+}
+.chrome-toggle:hover { color: var(--ink); }
+.teach-stage.chrome-hidden .chrome-toggle { color: var(--ink); opacity: 0.5; }
+.teach-stage.chrome-hidden .chrome-toggle:hover { opacity: 1; }
+.teach-stage:not(.chrome-hidden) .chrome-toggle { opacity: 0.42; }
+.teach-stage:not(.chrome-hidden) .chrome-toggle:hover { opacity: 1; }
+
+.teach-stage.chrome-hidden .is-hideable {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(0) translateY(0) scale(0.96);
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+/* Keep the transcript's collapsed transform stable when hiding. */
+.teach-stage.chrome-hidden .transcript.is-hideable { transform: translateX(100%) translateY(0); }
+@media (max-width: 1199px) {
+  .teach-stage.chrome-hidden .transcript.is-hideable { transform: translateX(100%); }
+  .teach-stage.chrome-hidden .toolbar.is-hideable { transform: translateY(-130%); }
+  .teach-stage.chrome-hidden .composer.is-hideable { transform: translateX(-50%) translateY(130%); }
+  .teach-stage.chrome-hidden .teach-reply-state.is-hideable { transform: translateX(-50%) translateY(-130%); }
+}
+@media (min-width: 1200px) {
+  .teach-stage.chrome-hidden .toolbar.is-hideable { transform: translateX(-50%) translateY(-130%); }
+  .teach-stage.chrome-hidden .composer.is-hideable { transform: translateX(-50%) translateY(130%); }
+  .teach-stage.chrome-hidden .teach-reply-state.is-hideable { transform: translateX(-50%) translateY(-130%); }
+  .teach-stage.chrome-hidden .breadcrumb.is-hideable { transform: translateX(-130%); }
+  .teach-stage.chrome-hidden .zoombar.is-hideable { transform: translateX(130%); }
+}

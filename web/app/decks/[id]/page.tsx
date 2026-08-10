@@ -53,7 +53,7 @@ export default function DeckOverviewPage() {
   };
 
   return (
-    <div className="graph-paper min-h-screen">
+    <div className="graph-paper page-scroll">
       <div className="mx-auto max-w-3xl px-6 py-10">
         <div className="mb-6 flex items-center justify-between">
           <Link href="/decks" className="mono text-[12px] tracking-wide text-ink-3 transition-colors hover:text-ink">
