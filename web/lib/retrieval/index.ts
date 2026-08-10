@@ -11,6 +11,7 @@ import {
 import { conceptMasteryForProject, chunksToConcepts } from "@/lib/db/mastery";
 import type { Band } from "@/lib/mastery/model";
 import type { SourceEntry, Message } from "@/lib/db/schema";
+import { retrieveViaTeacher, TeacherUnavailable } from "./teacher";
 
 export interface ChunkEmb {
   chunkId?: string;
@@ -244,6 +245,25 @@ export async function retrieve(opts: {
       .map((message) => message.content)
       .join(" ");
     if (previousUserText) explicitIds = detectMaterialReferences(previousUserText, materialInventory);
+  }
+
+  // The knowledge plane owns retrieval now. This falls back to the original
+  // SQLite path rather than failing the turn: a lesson must never stop because
+  // a neighbouring process is restarting (ARCHITECTURE_V2 §4).
+  if (process.env.TEACHER_RETRIEVAL !== "0") {
+    try {
+      const sources = await retrieveViaTeacher({
+        projectId: opts.projectId,
+        query,
+        explicitIds,
+      });
+      if (sources.length) {
+        return { contextBlock: buildEvidenceContext({ materials, sources }), sources };
+      }
+    } catch (err) {
+      if (!(err instanceof TeacherUnavailable)) throw err;
+      console.warn("[retrieval] teacher service unavailable, using local index:", err.message);
+    }
   }
 
   const masteryMap = conceptMasteryForProject(opts.projectId, Date.now());

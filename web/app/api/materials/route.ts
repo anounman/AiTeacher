@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createMaterial, getMaterial, getProject, updateMaterialStatus } from "@/lib/db";
 import { getModelConfig, getProvider } from "@/lib/llm/provider";
 import { extractPdf, extractUrl, ingestFromText } from "@/lib/ingest";
+import { ingestToTeacher } from "@/lib/ingest/teacher";
 
 // POST /api/materials — multipart/form-data: { projectId, title?, file? | url? }
 // or JSON: { projectId, title?, url }. Creates a material (status=processing),
@@ -78,8 +79,31 @@ export async function POST(req: Request) {
     return NextResponse.json(getMaterial(material.id), { status: 502 });
   }
 
-  // Extract + ingest synchronously. On failure, mark the material errored.
+  // Ingest through the knowledge plane, which owns parsing (docling for
+  // page-accurate PDFs, markitdown for the rest), chunking and the index.
+  // The local SQLite path stays as the fallback for when that service is
+  // down — a learner adding a source should not have to know it exists.
   try {
+    if (uploadFile) {
+      const bytes = new Uint8Array(await uploadFile.arrayBuffer());
+      try {
+        const result = await ingestToTeacher({
+          projectId,
+          materialId: material.id,
+          filename: fileName || sourceRef,
+          bytes,
+          sourceUri: sourceRef,
+        });
+        if (result.status === "error") throw new Error(result.error ?? "ingest failed");
+        // The converted text now lives in the knowledge plane; keeping a
+        // second copy here would be the thing that goes stale.
+        updateMaterialStatus(material.id, "ready", { charCount: result.chars, text: "" });
+        return NextResponse.json(getMaterial(material.id), { status: 201 });
+      } catch (err) {
+        console.warn("[materials] teacher ingest failed, using local index:", err);
+      }
+    }
+
     if (uploadFile && isPdf) {
       const extracted = await extractPdf(new Uint8Array(await uploadFile.arrayBuffer()));
       await ingestFromText(material.id, extracted.text, { pages: extracted.pages });

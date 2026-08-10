@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Single-user today, but every row is workspace-scoped so multi-tenant is
     # a config change rather than a migration (ARCHITECTURE_V2 §8).
-    default_workspace_id: int = 1
+    default_workspace_id: str = "default"
 
 
 @lru_cache

@@ -13,8 +13,17 @@ import httpx
 from fastapi import FastAPI
 
 from app.config import settings
+from app.knowledge.db import create_schema
+from app.knowledge.routes import router as knowledge_router
 
 app = FastAPI(title="AI Teacher", version="0.1.0")
+app.include_router(knowledge_router)
+
+
+@app.on_event("startup")
+async def _startup() -> None:
+    # Idempotent; see the ponytail note in knowledge/db.py about Alembic.
+    await create_schema()
 
 
 async def _probe(name: str, url: str) -> dict:

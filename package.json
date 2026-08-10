@@ -12,11 +12,12 @@
     "teacher": "teacher/.venv/bin/uvicorn app.main:app --app-dir teacher --host 127.0.0.1 --port 8900 --reload",
     "teacher:install": "uv venv --python 3.12 teacher/.venv && uv pip install --python teacher/.venv/bin/python -e teacher[dev]",
     "db": "docker compose up -d postgres",
-    "test": "npm run test:fsrs && npm run test:mastery && npm run test:retrieval && npm run test:teach && npm run test:writer",
+    "test": "npm run test:fsrs && npm run test:mastery && npm run test:retrieval && npm run test:teach && npm run test:writer && npm run test:teacher",
     "test:fsrs": "npm --prefix web run test:fsrs",
     "test:mastery": "npm --prefix web run test:mastery",
     "test:retrieval": "npm --prefix web run test:retrieval",
     "test:teach": "npm --prefix web run test:teach",
-    "test:writer": "mathwriter/.venv/bin/python mathwriter/test_svg_canvas.py"
+    "test:writer": "mathwriter/.venv/bin/python mathwriter/test_svg_canvas.py",
+    "test:teacher": "teacher/.venv/bin/python -m pytest teacher/tests -q"
   }
 }
