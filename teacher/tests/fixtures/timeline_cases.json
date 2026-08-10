@@ -1,0 +1,465 @@
+[
+  {
+    "name": "empty",
+    "events": [],
+    "startAt": 0,
+    "beats": []
+  },
+  {
+    "name": "speech only",
+    "events": [
+      {
+        "kind": "speak",
+        "text": "One sentence."
+      }
+    ],
+    "startAt": 0,
+    "beats": [
+      {
+        "from": 0,
+        "to": 1,
+        "estimatedDurationMs": 850,
+        "speech": [
+          {
+            "eventIndex": 0,
+            "atMs": 0,
+            "estimatedDurationMs": 850
+          }
+        ],
+        "draws": []
+      }
+    ]
+  },
+  {
+    "name": "single draw",
+    "events": [
+      {
+        "kind": "draw"
+      }
+    ],
+    "startAt": 0,
+    "beats": [
+      {
+        "from": 0,
+        "to": 1,
+        "estimatedDurationMs": 850,
+        "speech": [],
+        "draws": [
+          {
+            "eventIndex": 0,
+            "atMs": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "grouped beats",
+    "events": [
+      {
+        "kind": "speak",
+        "text": "First point."
+      },
+      {
+        "kind": "speak",
+        "text": "Here is why."
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "speak",
+        "text": "Next point."
+      },
+      {
+        "kind": "draw"
+      }
+    ],
+    "startAt": 0,
+    "beats": [
+      {
+        "from": 0,
+        "to": 4,
+        "estimatedDurationMs": 2035,
+        "speech": [
+          {
+            "eventIndex": 0,
+            "atMs": 0,
+            "estimatedDurationMs": 850
+          },
+          {
+            "eventIndex": 1,
+            "atMs": 850,
+            "estimatedDurationMs": 1185
+          }
+        ],
+        "draws": [
+          {
+            "eventIndex": 2,
+            "atMs": 120
+          },
+          {
+            "eventIndex": 3,
+            "atMs": 1675
+          }
+        ]
+      },
+      {
+        "from": 4,
+        "to": 6,
+        "estimatedDurationMs": 850,
+        "speech": [
+          {
+            "eventIndex": 4,
+            "atMs": 0,
+            "estimatedDurationMs": 850
+          }
+        ],
+        "draws": [
+          {
+            "eventIndex": 5,
+            "atMs": 68
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "three visuals in one narration",
+    "events": [
+      {
+        "kind": "speak",
+        "text": "Let us carefully build this visual explanation in three clear parts."
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      }
+    ],
+    "startAt": 0,
+    "beats": [
+      {
+        "from": 0,
+        "to": 4,
+        "estimatedDurationMs": 3865,
+        "speech": [
+          {
+            "eventIndex": 0,
+            "atMs": 0,
+            "estimatedDurationMs": 3865
+          }
+        ],
+        "draws": [
+          {
+            "eventIndex": 1,
+            "atMs": 120
+          },
+          {
+            "eventIndex": 2,
+            "atMs": 1812.5
+          },
+          {
+            "eventIndex": 3,
+            "atMs": 3505
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "dense visuals batch",
+    "events": [
+      {
+        "kind": "speak",
+        "text": "This explanation is deliberately long enough to create several well spaced visual cue moments."
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      }
+    ],
+    "startAt": 0,
+    "beats": [
+      {
+        "from": 0,
+        "to": 13,
+        "estimatedDurationMs": 4870,
+        "speech": [
+          {
+            "eventIndex": 0,
+            "atMs": 0,
+            "estimatedDurationMs": 4870
+          }
+        ],
+        "draws": [
+          {
+            "eventIndex": 1,
+            "atMs": 120
+          },
+          {
+            "eventIndex": 2,
+            "atMs": 668.75
+          },
+          {
+            "eventIndex": 3,
+            "atMs": 668.75
+          },
+          {
+            "eventIndex": 4,
+            "atMs": 1217.5
+          },
+          {
+            "eventIndex": 5,
+            "atMs": 1766.25
+          },
+          {
+            "eventIndex": 6,
+            "atMs": 2315
+          },
+          {
+            "eventIndex": 7,
+            "atMs": 2315
+          },
+          {
+            "eventIndex": 8,
+            "atMs": 2863.75
+          },
+          {
+            "eventIndex": 9,
+            "atMs": 3412.5
+          },
+          {
+            "eventIndex": 10,
+            "atMs": 3961.25
+          },
+          {
+            "eventIndex": 11,
+            "atMs": 3961.25
+          },
+          {
+            "eventIndex": 12,
+            "atMs": 4510
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "draw only cadence",
+    "events": [
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      }
+    ],
+    "startAt": 0,
+    "beats": [
+      {
+        "from": 0,
+        "to": 3,
+        "estimatedDurationMs": 1950,
+        "speech": [],
+        "draws": [
+          {
+            "eventIndex": 0,
+            "atMs": 0
+          },
+          {
+            "eventIndex": 1,
+            "atMs": 650
+          },
+          {
+            "eventIndex": 2,
+            "atMs": 1300
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "interruption cursor",
+    "events": [
+      {
+        "kind": "speak",
+        "text": "Delivered."
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "speak",
+        "text": "Resume here."
+      },
+      {
+        "kind": "draw"
+      }
+    ],
+    "startAt": 2,
+    "beats": [
+      {
+        "from": 2,
+        "to": 4,
+        "estimatedDurationMs": 850,
+        "speech": [
+          {
+            "eventIndex": 2,
+            "atMs": 0,
+            "estimatedDurationMs": 850
+          }
+        ],
+        "draws": [
+          {
+            "eventIndex": 3,
+            "atMs": 68
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "punctuation heavy",
+    "events": [
+      {
+        "kind": "speak",
+        "text": "First, second; third: fourth — done."
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      }
+    ],
+    "startAt": 0,
+    "beats": [
+      {
+        "from": 0,
+        "to": 3,
+        "estimatedDurationMs": 2550,
+        "speech": [
+          {
+            "eventIndex": 0,
+            "atMs": 0,
+            "estimatedDurationMs": 2550
+          }
+        ],
+        "draws": [
+          {
+            "eventIndex": 1,
+            "atMs": 120
+          },
+          {
+            "eventIndex": 2,
+            "atMs": 2190
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "very long speech clamps",
+    "events": [
+      {
+        "kind": "speak",
+        "text": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word "
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      },
+      {
+        "kind": "draw"
+      }
+    ],
+    "startAt": 0,
+    "beats": [
+      {
+        "from": 0,
+        "to": 6,
+        "estimatedDurationMs": 12000,
+        "speech": [
+          {
+            "eventIndex": 0,
+            "atMs": 0,
+            "estimatedDurationMs": 12000
+          }
+        ],
+        "draws": [
+          {
+            "eventIndex": 1,
+            "atMs": 120
+          },
+          {
+            "eventIndex": 2,
+            "atMs": 3000
+          },
+          {
+            "eventIndex": 3,
+            "atMs": 5880
+          },
+          {
+            "eventIndex": 4,
+            "atMs": 8760
+          },
+          {
+            "eventIndex": 5,
+            "atMs": 11640
+          }
+        ]
+      }
+    ]
+  }
+]

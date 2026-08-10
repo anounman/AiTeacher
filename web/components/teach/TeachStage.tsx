@@ -10,7 +10,8 @@ import { findTarget as findMarkTarget } from "./MathMark";
 import { waitForDone } from "@/lib/teach/completion";
 import { performer, type PerformerStatus } from "@/lib/teach/performer";
 import { describeHits, queryRegion } from "@/lib/teach/spatial";
-import { buildLessonTimeline, type DrawCue } from "@/lib/teach/timeline";
+import { type DrawCue } from "@/lib/teach/timeline";
+import { planLessonTimeline } from "@/lib/teach/timeline-client";
 import { segmentEventIndex } from "@/lib/teach/visual-lesson";
 import { visualPlanSchema, type VisualPlan } from "@/lib/teach/visual-schema";
 import { MAX_ZOOM, MIN_ZOOM, useCanvas } from "@/lib/teach/canvas";
@@ -758,7 +759,7 @@ export function TeachStage({
         // voice remains the authoritative clock when present; slow renderers
         // get a short settle window instead of holding the next sentence for
         // their full worst-case timeout.
-        const timeline = buildLessonTimeline(eventsRef.current, cursor);
+        const timeline = await planLessonTimeline(eventsRef.current, cursor);
         for (const beat of timeline) {
           if (superseded()) return;
           await waitUnpaused();

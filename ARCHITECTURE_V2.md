@@ -329,9 +329,13 @@ Each phase leaves the app working.
   agents above; the grounding validator sits outside them. *Done when: the
   scorecard from R2 does not regress and lesson quality on a held-out set
   improves.*
-- **R4 — Performance plane split.** Timeline building moves server-side; `web/`
-  becomes a cue consumer. *Done when: a lesson replays identically from a stored
-  cue stream.*
+- **R4 — Performance plane split. ◐ 2026-08-10.** The cue planner now lives in
+  `teacher/app/performance/timeline.py`; `web/` asks for the plan and rehydrates
+  cue indices into events, falling back to its local planner when the service is
+  unreachable. The two implementations are held byte-identical by a generated
+  fixture set (`teacher/tests/test_timeline_parity.py`, 10 cases). *Still open:*
+  persisting the cue stream so a lesson replays from storage rather than being
+  re-planned.
 - **R5 — Writer Engine swap.** Point the adapter at your friend's service, keep
   `mathwriter` as fallback. *Done when: the contract suite passes against both.*
 
