@@ -15,11 +15,13 @@ from fastapi import FastAPI
 from app.config import settings
 from app.knowledge.db import create_schema
 from app.knowledge.routes import router as knowledge_router
+from app.agents.routes import router as agents_router
 from app.performance.routes import router as performance_router
 
 app = FastAPI(title="AI Teacher", version="0.1.0")
 app.include_router(knowledge_router)
 app.include_router(performance_router)
+app.include_router(agents_router)
 
 
 @app.on_event("startup")

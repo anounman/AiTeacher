@@ -18,6 +18,9 @@
     "test:retrieval": "npm --prefix web run test:retrieval",
     "test:teach": "npm --prefix web run test:teach",
     "test:writer": "mathwriter/.venv/bin/python mathwriter/test_svg_canvas.py",
-    "test:teacher": "teacher/.venv/bin/python -m pytest teacher/tests -q"
+    "test:teacher": "teacher/.venv/bin/python -m pytest teacher/tests -q",
+    "eval": "cd teacher && .venv/bin/python -m app.evals.run --gold evals/gold.jsonl",
+    "eval:answers": "cd teacher && .venv/bin/python -m app.evals.run --gold evals/gold.jsonl --answers",
+    "eval:gen": "cd teacher && .venv/bin/python -m app.evals.generate --out evals/gold.jsonl"
   }
 }
