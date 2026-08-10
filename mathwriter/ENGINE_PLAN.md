@@ -68,6 +68,20 @@ newline-delimited *string* (`5:3:8`), while every other `[G]` type takes
 structured JSON. A model that guesses the natural shape gets a blank board.
 No schema, no validation, no graceful degradation.
 
+**D6b — `[G]` types silently drop content.** `er_diagram` renders an entity's
+`attributes` nowhere: `{"name":"Doctor","attributes":[...]}` comes back as a
+123x48 box labelled "Doctor" and the two attributes are gone. No error, no
+warning — the lesson simply teaches less than it said. Found by the render-QA
+loop comparing markup against what is legible in the output; a vision check
+alone passes it, because the picture is a perfectly clean box.
+
+**D6c — FIXED 2026-08-10: `tree` rejected the syntax our own prompt teaches.**
+The prompt documents `10:null:14`; `draw_tree` accepted only `_`, so `null`
+became an undeclared child node and raised `KeyError` deep in layout. The
+sidecar 500'd and the board fell back to printing the raw `[G]{...}[/G]` spec
+as literal text on screen. The parser now treats `_ null none nil - x` and
+empty as "no child", and a child that never gets its own line is a leaf.
+
 **D7 — No QA loop.** No golden images, no per-render diagnostics, no perf
 budget. Every regression is found by a human looking at a lesson.
 

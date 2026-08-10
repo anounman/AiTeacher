@@ -9,6 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from app.performance.render_qa import repair
 from app.performance.timeline import build_lesson_timeline, timeline_to_json
 
 router = APIRouter(prefix="/performance", tags=["performance"])
@@ -29,3 +30,29 @@ class TimelineRequest(BaseModel):
 def timeline(req: TimelineRequest) -> dict:
     beats = build_lesson_timeline(req.events, req.start_at)
     return {"beats": timeline_to_json(beats)}
+
+
+class RepairRequest(BaseModel):
+    markup: str
+    scale: float = 1.0
+
+
+@router.post("/repair-markup")
+async def repair_markup(req: RepairRequest) -> dict:
+    """Render it, look at it, rewrite it if it came out broken.
+
+    Never fails the caller: an unreachable vision model, a failed render or a
+    rewrite that renders worse all return the original markup unchanged.
+    """
+    result = await repair(req.markup, req.scale)
+    return {
+        "markup": result.markup,
+        "changed": result.changed,
+        "attempts": result.attempts,
+        "verdict": {
+            "ok": result.verdict.ok,
+            "severity": result.verdict.severity,
+            "problems": result.verdict.problems,
+            "reads_as": result.verdict.reads_as,
+        },
+    }

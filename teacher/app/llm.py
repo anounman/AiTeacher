@@ -55,6 +55,45 @@ def slot(name: str) -> str:
     return entry.get("model", "")
 
 
+async def look(
+    prompt: str,
+    images_b64: list[str],
+    *,
+    slot_name: str = "read",
+    json_mode: bool = True,
+    timeout: float = 60.0,
+) -> str:
+    """Show the model an image and ask about it.
+
+    Goes through the OpenAI-compatible endpoint with `image_url` parts, not
+    Ollama's native `/api/chat` + `images: [...]`. The native shape is accepted
+    without error by the cloud slots and the image never reaches the model —
+    it answers confidently about a picture it cannot see (a binary tree came
+    back described as a letter-tracing worksheet). Silent, and the exact thing
+    a quality checker must not do. The web app's read-ink route already used
+    this shape; this matches it.
+    """
+    content: list[dict] = [{"type": "text", "text": prompt}]
+    for image in images_b64:
+        url = image if image.startswith("data:") else f"data:image/png;base64,{image}"
+        content.append({"type": "image_url", "image_url": {"url": url}})
+
+    payload: dict = {
+        "model": slot(slot_name),
+        "messages": [{"role": "user", "content": content}],
+        "stream": False,
+    }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        res = await client.post(
+            f"{settings().ollama_url}/v1/chat/completions", json=payload
+        )
+        res.raise_for_status()
+        choices = res.json().get("choices") or [{}]
+        return (choices[0].get("message") or {}).get("content", "")
+
+
 async def chat(
     messages: list[dict],
     *,

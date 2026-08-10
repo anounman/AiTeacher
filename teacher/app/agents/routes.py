@@ -40,4 +40,5 @@ async def teach_route(req: TeachRequest) -> dict:
         # Surfaced, not hidden: the eval harness counts invented markers, and
         # a spike in them is the first sign a model swap went wrong.
         "grounding": asdict(lesson.grounding),
+        "renderQa": lesson.render_qa,
     }

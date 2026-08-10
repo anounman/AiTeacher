@@ -192,16 +192,41 @@ def draw_tree(spec_text, glyphs, scale=0.75):
     if not lines:
         return Image.new('RGBA', (1, 1), (0, 0, 0, 0)), 0
 
-    # Parse nodes
+    # Parse nodes.
+    #
+    # Local patch (keep on re-vendor): two robustness fixes. Upstream accepted
+    # only '_' for "no child", but every prompt and every model writes 'null',
+    # and a literal 'null' became a child node that was never declared —
+    # KeyError deep in layout, a 500 from the sidecar, and the board silently
+    # falling back to printing the raw [G] spec as text. Second, a child that is
+    # never given its own line is a leaf; upstream crashed on that too, which
+    # made the terse form ("8:3:10" alone) unusable.
+    EMPTY = {'_', '', '-', 'x', 'null', 'none', 'nil', 'None', 'NULL', 'Null'}
+
+    def child_or_none(token):
+        return None if token.strip() in EMPTY else token.strip()
+
     nodes = {}
-    children = {}  # parent -> [left, right]
+    children = {}  # parent -> (left, right)
     for line in lines:
         parts = line.split(':')
         val = parts[0].strip()
-        left = parts[1].strip() if len(parts) > 1 else '_'
-        right = parts[2].strip() if len(parts) > 2 else '_'
+        if not val or val in EMPTY:
+            continue
+        left = child_or_none(parts[1]) if len(parts) > 1 else None
+        right = child_or_none(parts[2]) if len(parts) > 2 else None
         nodes[val] = True
-        children[val] = (left if left != '_' else None, right if right != '_' else None)
+        children[val] = (left, right)
+
+    # Referenced-but-undeclared children are leaves.
+    for left, right in list(children.values()):
+        for child in (left, right):
+            if child is not None and child not in nodes:
+                nodes[child] = True
+                children[child] = (None, None)
+
+    if not nodes:
+        return Image.new('RGBA', (1, 1), (0, 0, 0, 0)), 0
 
     root_val = lines[0].split(':')[0].strip()
 

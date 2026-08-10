@@ -20,6 +20,7 @@ import pathlib
 from dataclasses import dataclass, field
 
 from app.agents.grounding import GroundingReport, enforce
+from app.performance.lesson_qa import repair_lesson
 from app.knowledge.db import sessionmaker
 from app.knowledge.indexing.embedder import embed_query
 from app.knowledge.retrieval.hybrid import hybrid_search
@@ -57,6 +58,8 @@ class Lesson:
     evidence: list[dict] = field(default_factory=list)
     grounding: GroundingReport = field(default_factory=GroundingReport)
     model: str = ""
+    # What render QA saw, per diagram. Empty means the lesson had none.
+    render_qa: list[dict] = field(default_factory=list)
 
 
 def _source_id(document_id: int, chunk_id: int) -> str:
@@ -129,4 +132,15 @@ async def teach(question: str, workspace_id: str, history: list[dict] | None = N
             break
 
     cleaned, report = enforce(raw, allowed)
-    return Lesson(markdown=cleaned, evidence=evidence, grounding=report, model=slot("reason"))
+
+    # Look at every diagram before the student does. Runs here, during
+    # generation, so playback never waits on it.
+    checked, qa = await repair_lesson(cleaned)
+
+    return Lesson(
+        markdown=checked,
+        evidence=evidence,
+        grounding=report,
+        model=slot("reason"),
+        render_qa=qa,
+    )
