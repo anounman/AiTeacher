@@ -1,0 +1,28 @@
+AiTeacher
+Copyright (c) 2026 Ankush Das
+
+This product includes software developed as part of the following projects.
+
+------------------------------------------------------------------------------
+SurfSense — https://github.com/MODSetter/SurfSense
+Licensed under the Apache License, Version 2.0.
+
+Portions of teacher/app/knowledge/ are derived from SurfSense's ETL, indexing
+and retrieval pipelines (surfsense_backend/app/{etl_pipeline,indexing_pipeline,
+retriever,knowledge_store}), with modifications: adapted to this project's
+evidence envelope and page-provenance citation contract, and to a
+docling/markitdown converter split.
+
+NOT included: surfsense_backend/app/proprietary/ (platforms/, web_crawler/),
+which SurfSense licenses under the Business Source License 1.1. No code from
+that directory is present in this repository.
+
+------------------------------------------------------------------------------
+mathwriter — https://github.com/JayanshJ/mathwriter
+The handwriting renderer vendored at mathwriter/, upgraded with the diagram
+engine from https://github.com/anounman/mathwriter-diagrams.
+
+------------------------------------------------------------------------------
+StudyGPT — https://github.com/JayanshJ/chat
+The chat, ingest, concept-graph, FSRS and mastery base this project was built
+on top of.

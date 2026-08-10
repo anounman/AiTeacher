@@ -1,0 +1,26 @@
+# Local infrastructure. The app processes (`npm run dev`, `npm run teacher`,
+# `npm run writer`) run on the host against these — hot reload matters more
+# than containerizing our own code during development.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: aiteacher-postgres
+    environment:
+      POSTGRES_USER: aiteacher
+      POSTGRES_PASSWORD: aiteacher
+      POSTGRES_DB: aiteacher
+    # 5433 on the host: 5432 is routinely taken by an existing local postgres,
+    # and a silent connection to the wrong database is a bad afternoon.
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./teacher/sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiteacher -d aiteacher"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:

@@ -118,13 +118,17 @@ def load_glyphs():
     global _GLYPH_CACHE
     if _GLYPH_CACHE is not None:
         return _GLYPH_CACHE
-    with open('glyphs/metadata.json', 'r') as f:
+    # Local patch (keep on re-vendor): resolve the dataset relative to THIS
+    # file, not the cwd. The engine is imported from the repo root now
+    # (`npm test`), where a cwd-relative 'glyphs/' does not exist.
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, 'glyphs', 'metadata.json'), 'r') as f:
         meta = json.load(f)
     cache = {}
     for ch, variants in meta.items():
         cache[ch] = []
         for v in variants:
-            img = Image.open(v['file']).convert('RGBA')
+            img = Image.open(os.path.join(here, v['file'])).convert('RGBA')
             img = recolor_to_blue(img)
             v2 = {**v, 'img': img, 'baseline_y': v['baseline_y'] - 48}
             cache[ch].append(v2)

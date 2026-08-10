@@ -61,7 +61,8 @@ THRESHOLD = 110
 SIMPLIFY_FRAC = 0.003
 MIN_CONTOUR_AREA = 6.0  # in upsampled px²: drops speckle, keeps dots on i/j
 
-DEFAULT_OUT = os.path.join(HERE, "..", "data", "writer", "glyphs.paths.json")
+# Generated, gitignored, and owned by the engine — not by the app's data dir.
+DEFAULT_OUT = os.path.join(HERE, ".cache", "glyphs.paths.json")
 
 
 def _catmull_rom_to_bezier(pts):

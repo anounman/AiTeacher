@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -14,8 +14,8 @@
 /coverage
 
 # next.js
-/.next/
-/out/
+.next/
+out/
 
 # production
 /build
@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -40,14 +41,19 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# runtime sqlite db
-/data
+# runtime sqlite db (web/) — superseded by postgres in R1
+web/data/
 
 # tesseract.js OCR language data cache
 *.traineddata
 tesseract-*.cache
-mathwriter/.venv/
+
+# python
 __pycache__/
+*.py[cod]
+mathwriter/.venv/
+mathwriter/.cache/
+teacher/.venv/
 
 # teaching-video analysis output (frames + reports, regenerable)
-/scripts/out/
+web/scripts/out/
