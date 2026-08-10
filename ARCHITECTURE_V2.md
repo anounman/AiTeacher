@@ -311,14 +311,16 @@ AiTeacher/
 
 Each phase leaves the app working.
 
-- **R0 — Decide + scaffold.** `teacher/` FastAPI service, docker-compose with
-  Postgres+pgvector, health check, `web/` proxies one route to it. Nothing else
-  moves. *Done when: `/api/health` reports both processes and the DB.*
-- **R1 — Knowledge plane.** Port SurfSense's ETL + indexing + retrieval
-  (Apache-2.0 region only, with `NOTICE`), Docling for PDFs, MarkItDown for the
-  tail, image describer on. Migrate existing SQLite materials into Postgres.
-  *Done when: retrieval recall@k on our gold set is ≥ today's, and a scanned PDF
-  with tables ingests with page-accurate citations.*
+- **R0 — Decide + scaffold. ✅ 2026-08-10.** Next.js in `web/`, `teacher/`
+  FastAPI service, Postgres+pgvector on 5433, `/api/health` spanning both
+  processes plus ollama and the writer engine.
+- **R1 — Knowledge plane. ✅ 2026-08-10.** Classifier → Docling (PDF/DOCX/PPTX,
+  page-accurate) / MarkItDown (the tail) → table-aware chunker with page + line
+  provenance → Ollama embeddings → Postgres. Hybrid dense + full-text retrieval
+  fused with RRF at k=60, 190 ms end to end over the migrated corpus. All 46
+  materials and 953 chunks migrated with their embeddings; chat retrieval and
+  material upload both run through the plane, with the SQLite path as fallback.
+  *Still open:* the image/figure describer, and a reranker on top of RRF.
 - **R2 — Eval harness first.** 100–200 gold QA pairs + 30 unanswerable traps;
   citation precision/recall, abstention accuracy, retrieval recall@k/MRR. This
   phase exists before R3 on purpose — you cannot tune agents you cannot score.
