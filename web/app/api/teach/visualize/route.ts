@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { updateMessageContent } from "@/lib/db";
 import { planLessonVisuals } from "@/lib/teach/visual-director";
-import { appendVisualPlan, visualInputFromLesson } from "@/lib/teach/visual-lesson";
+import {
+  appendConceptGraph,
+  appendVisualPlan,
+  lessonTopic,
+  visualInputFromLesson,
+} from "@/lib/teach/visual-lesson";
+import { visualizeConcept } from "@/lib/visual-engine-server";
 
 type Body = { lessonMd?: unknown; lessonId?: unknown; messageId?: unknown };
 
@@ -20,6 +26,33 @@ export async function POST(req: Request) {
   const messageId = typeof body.messageId === "string" && body.messageId.length <= 100
     ? body.messageId
     : undefined;
+
+  // The visual engine (lib/visual-engine) replaces the director for lesson
+  // diagrams when VISUAL_ENGINE=1. It is a better fit by construction: the
+  // model emits a semantic graph with no coordinates and deterministic code
+  // does the layout, so the overlap failures the director produced cannot
+  // occur. Flag-gated and falling through on any failure, because a lesson
+  // that already played is not worth breaking for a nicer picture.
+  if (process.env.VISUAL_ENGINE === "1") {
+    const topic = lessonTopic(lessonMd);
+    if (topic) {
+      try {
+        const { doc, graph } = await visualizeConcept(topic, { timeoutMs: 30_000 });
+        const directed = appendConceptGraph(lessonMd, graph, {
+          title: doc.title,
+          summary: doc.summary,
+        });
+        if (messageId) updateMessageContent(messageId, directed);
+        return NextResponse.json({
+          source: "engine",
+          engine: { diagramType: doc.diagramType, template: doc.template ?? null, topic },
+          directedMd: directed,
+        });
+      } catch (err) {
+        console.warn("[teach/visualize] engine failed, using director:", err);
+      }
+    }
+  }
 
   // This route never gates lesson playback, and a scene that lands after the
   // lesson has finished is worthless — so cap the wait well inside a typical

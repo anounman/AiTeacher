@@ -47,6 +47,20 @@ export const teachActionSchema = z.discriminatedUnion("type", [
   // so a future asset dataset can replace placeholders without changing old
   // lessons or the model contract.
   z.object({ type: z.literal("visual_scene"), plan: visualPlanSchema }),
+  // A diagram from the visual engine (lib/visual-engine): a laid-out graph,
+  // already positioned, rendered by rough.js in the browser. A NEW action
+  // rather than a field on visual_scene, so every lesson already persisted
+  // with a plan keeps rendering exactly as it did.
+  //
+  // `graph` is deliberately opaque here. Its shape is the engine's
+  // PositionedGraph and validating a copy of it in this file would be a
+  // second schema to keep in step with an upstream we do not own.
+  z.object({
+    type: z.literal("concept_graph"),
+    graph: z.unknown(),
+    title: z.string().optional(),
+    summary: z.string().optional(),
+  }),
   z.object({ type: z.literal("new_page") }),
   // Client-only vertical clearance (never emitted by the model): pushes new
   // writing below regions the student has already inked so a reply can't

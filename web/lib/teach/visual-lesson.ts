@@ -140,3 +140,39 @@ export function segmentEventIndex(events: TeachEvent[], segmentId: string | unde
   }
   return null;
 }
+
+/** The concept a lesson is about, as a query for the visual engine.
+ *
+ * The board's first underlined heading is the teacher's own answer to "what is
+ * this lesson called", so it beats anything inferred from the prose. Falls
+ * back to the opening spoken sentence. */
+export function lessonTopic(lessonMd: string): string {
+  const events = parseTeachEvents(lessonMd, true);
+  for (const event of events) {
+    if (event.kind !== "draw" || event.action.type !== "write") continue;
+    const heading = /~~([^~]{3,80})~~/.exec(event.action.markup);
+    if (heading) return heading[1]!.trim();
+  }
+  for (const event of events) {
+    if (event.kind === "speak") {
+      const sentence = speakable(event.text).split(/(?<=[.!?])\s/)[0] ?? "";
+      if (sentence.trim().length >= 8) return sentence.trim().slice(0, 160);
+    }
+  }
+  return "";
+}
+
+/** Append an engine diagram to a lesson as a `concept_graph` board action. */
+export function appendConceptGraph(
+  lessonMd: string,
+  graph: unknown,
+  meta: { title?: string; summary?: string } = {},
+): string {
+  const already = parseTeachEvents(lessonMd, true).some(
+    (event) => event.kind === "draw" && event.action.type === "concept_graph",
+  );
+  if (already) return lessonMd;
+  const action = { type: "concept_graph", graph, ...meta };
+  const fence = `\`\`\`board\n${JSON.stringify([action], null, 2)}\n\`\`\``;
+  return `${lessonMd.trimEnd()}\n\n${fence}`;
+}

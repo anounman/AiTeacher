@@ -9,6 +9,8 @@ import { MathMark } from "./MathMark";
 import { CodeWriteOn } from "./CodeWriteOn";
 import { HandWrite } from "./HandWrite";
 import { VisualScene } from "./VisualScene";
+import { ConceptGraphScene } from "./ConceptGraphScene";
+import type { PositionedGraph } from "@/lib/visual-engine/index";
 
 export interface BoardEntry {
   action: TeachAction;
@@ -180,6 +182,14 @@ function BoardItem({ entry }: { entry: BoardEntry }) {
       );
     case "visual_scene":
       return <VisualScene plan={action.plan} instant={!live} />;
+    case "concept_graph":
+      return (
+        <ConceptGraphScene
+          graph={action.graph as PositionedGraph | null}
+          title={action.title}
+          summary={action.summary}
+        />
+      );
     case "spacer":
       return <div style={{ height: action.h }} aria-hidden />;
     default:
