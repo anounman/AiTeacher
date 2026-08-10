@@ -75,7 +75,13 @@ export function prefetchSpeech(text: string): void {
 // Browser voice — used when Kokoro is down. Cancelled by a pause, so the
 // caller re-speaks the segment on resume (speechSynthesis can't resume
 // reliably across browsers).
-function speakFallback(text: string): Promise<boolean> {
+/** Fraction 0..1 of the way through the current utterance, or null when
+ * nothing is speaking. The pen is driven off this rather than off an estimate:
+ * a cue placed at "60% of the way through this sentence" then lands where the
+ * voice actually is, not where a 335ms-per-word guess said it would be. */
+export type SpeechProgress = (fraction: number) => void;
+
+function speakFallback(text: string, onProgress?: SpeechProgress): Promise<boolean> {
   return new Promise((resolve) => {
     const synthApi = window.speechSynthesis;
     if (!synthApi) return resolve(true);
@@ -85,8 +91,22 @@ function speakFallback(text: string): Promise<boolean> {
     u.rate = cue.rate;
     u.volume = Math.max(0, Math.min(1, profile.volume));
     u.pitch = cue.expression === "curious" ? 1.06 : cue.expression === "serious" ? 0.96 : 1;
-    u.onend = () => resolve(!performer.paused());
-    u.onerror = () => resolve(!performer.paused());
+    // The browser voice reports real word boundaries, which is a better
+    // progress signal than anything we could infer.
+    if (onProgress) {
+      u.onboundary = (event) => {
+        const at = event.charIndex / Math.max(1, text.length);
+        onProgress(Math.max(0, Math.min(1, at)));
+      };
+    }
+    u.onend = () => {
+      onProgress?.(1);
+      resolve(!performer.paused());
+    };
+    u.onerror = () => {
+      onProgress?.(1);
+      resolve(!performer.paused());
+    };
     synthApi.speak(u);
   });
 }
@@ -96,22 +116,40 @@ function speakFallback(text: string): Promise<boolean> {
  * interrupted before finishing and should be retried by the caller.
  * Honours performer.pause()/resume() while playing.
  */
-export async function speak(text: string, muted: boolean): Promise<boolean> {
+export async function speak(
+  text: string,
+  muted: boolean,
+  onProgress?: SpeechProgress,
+): Promise<boolean> {
   const clean = text.trim();
-  if (!clean || muted) return true;
+  // Muted still needs a clock, or the board would dump every cue at once the
+  // moment the voice is off.
+  if (!clean || muted) {
+    onProgress?.(1);
+    return true;
+  }
   if (kokoroUp === null) await probeTts();
-  if (kokoroUp === false) return speakFallback(clean);
+  if (kokoroUp === false) return speakFallback(clean, onProgress);
 
   let url: string;
   try {
     url = await synth(clean, inferSpeechExpression(clean));
   } catch {
     kokoroUp = false; // host went away mid-lesson
-    return speakFallback(clean);
+    return speakFallback(clean, onProgress);
   }
 
   const audio = new Audio(url);
   current = audio;
+  if (onProgress) {
+    audio.addEventListener("timeupdate", () => {
+      const total = audio.duration;
+      if (Number.isFinite(total) && total > 0) {
+        onProgress(Math.max(0, Math.min(1, audio.currentTime / total)));
+      }
+    });
+    audio.addEventListener("ended", () => onProgress(1), { once: true });
+  }
   // Poll the performer: pause halts the audio in place, resume continues it.
   const watch = setInterval(() => {
     if (performer.paused()) {

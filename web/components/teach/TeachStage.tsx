@@ -20,7 +20,14 @@ import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
 import { InkLayer, useInk, type InkColor } from "./InkLayer";
 import { captureInk } from "@/lib/teach/ink-capture";
 import { repairBoard } from "@/lib/teach/repair";
-import { cancelSpeech, prefetchSpeech, probeTts, setVoice, speak as ttsSpeak } from "@/lib/teach/tts";
+import {
+  cancelSpeech,
+  prefetchSpeech,
+  probeTts,
+  setVoice,
+  speak as ttsSpeak,
+  type SpeechProgress,
+} from "@/lib/teach/tts";
 import {
   audioUploadName,
   microphoneErrorMessage,
@@ -58,6 +65,10 @@ function actionTimeoutMs(action: TeachAction): number {
 
 const AWAITED = new Set(["latex", "text", "heading", "mark", "code", "write"]);
 const VOICED_SETTLE_MS = 1_100;
+// A cue never waits on the voice for longer than this. Speech synthesis can
+// stall, a browser can throttle a background tab, and a pen that waits forever
+// for a clock that stopped is a lesson that stops with it.
+const CUE_WAIT_CAP_MS = 8_000;
 const SILENT_SETTLE_MS = 1_600;
 
 type DirectorSource = "model" | "fallback";
@@ -697,7 +708,8 @@ export function TeachStage({
   // Resolves false when the segment was cut short by a pause — the pump
   // retries it (Kokoro resumes in place; the browser fallback re-speaks).
   const speak = useCallback(
-    (text: string) => ttsSpeak(speakable(text), mutedRef.current),
+    (text: string, onProgress?: SpeechProgress) =>
+      ttsSpeak(speakable(text), mutedRef.current, onProgress),
     [],
   );
 
@@ -778,6 +790,9 @@ export function TeachStage({
           performer.activate(myKey, beat.from);
 
           let speechFinished = false;
+          // Milliseconds of narration actually delivered in this beat, fed by
+          // the speech synthesiser's own position.
+          let spokenMs = 0;
           const launched = new Set<number>();
           const completions: Promise<void>[] = [];
 
@@ -830,14 +845,38 @@ export function TeachStage({
               let doneOk = false;
               while (!doneOk && !superseded()) {
                 await waitUnpaused();
-                doneOk = await speak(cue.event.text);
+                // Report where the voice actually is, as a fraction of the
+                // whole beat's narration. The pen watches this: a cue placed
+                // 60% of the way through the beat now lands when the voice
+                // reaches 60%, not when a words-per-minute estimate says so.
+                const base = cue.atMs;
+                const span = Math.max(1, cue.estimatedDurationMs);
+                doneOk = await speak(cue.event.text, (fraction) => {
+                  spokenMs = base + fraction * span;
+                });
               }
+              spokenMs = cue.atMs + cue.estimatedDurationMs;
             }
           })();
 
           const visualTask = (async () => {
             let previousCueMs = 0;
             for (const cue of beat.draws) {
+              // With a voice, the voice is the clock: poll until it has
+              // actually reached this cue's position. Without one (muted, or a
+              // beat with no narration) fall back to the planned timing.
+              if (beat.speech.length) {
+                let waited = 0;
+                while (spokenMs < cue.atMs && !superseded() && waited < CUE_WAIT_CAP_MS) {
+                  if (speechFinished) break;
+                  await new Promise((r) => setTimeout(r, 60));
+                  if (!performer.paused()) waited += 60;
+                }
+                if (superseded()) break;
+                launchDraw(cue);
+                previousCueMs = cue.atMs;
+                continue;
+              }
               const reached = await waitForActiveMs(
                 cue.atMs - previousCueMs,
                 performer.paused,
