@@ -75,11 +75,12 @@ export function prefetchSpeech(text: string): void {
 // Browser voice — used when Kokoro is down. Cancelled by a pause, so the
 // caller re-speaks the segment on resume (speechSynthesis can't resume
 // reliably across browsers).
-/** Fraction 0..1 of the way through the current utterance, or null when
- * nothing is speaking. The pen is driven off this rather than off an estimate:
- * a cue placed at "60% of the way through this sentence" then lands where the
- * voice actually is, not where a 335ms-per-word guess said it would be. */
-export type SpeechProgress = (fraction: number) => void;
+/** Fraction 0..1 of the way through the current utterance, plus the character
+ * offset the voice has reached in the utterance text. The pen is driven off
+ * this rather than off an estimate: a written word cued to "where 'squared'
+ * is said" lands when the voice actually says it. The browser voice reports
+ * real word boundaries; Kokoro interpolates the offset from audio time. */
+export type SpeechProgress = (fraction: number, charIndex: number) => void;
 
 function speakFallback(text: string, onProgress?: SpeechProgress): Promise<boolean> {
   return new Promise((resolve) => {
@@ -96,15 +97,15 @@ function speakFallback(text: string, onProgress?: SpeechProgress): Promise<boole
     if (onProgress) {
       u.onboundary = (event) => {
         const at = event.charIndex / Math.max(1, text.length);
-        onProgress(Math.max(0, Math.min(1, at)));
+        onProgress(Math.max(0, Math.min(1, at)), event.charIndex);
       };
     }
     u.onend = () => {
-      onProgress?.(1);
+      onProgress?.(1, text.length);
       resolve(!performer.paused());
     };
     u.onerror = () => {
-      onProgress?.(1);
+      onProgress?.(1, text.length);
       resolve(!performer.paused());
     };
     synthApi.speak(u);
@@ -125,7 +126,7 @@ export async function speak(
   // Muted still needs a clock, or the board would dump every cue at once the
   // moment the voice is off.
   if (!clean || muted) {
-    onProgress?.(1);
+    onProgress?.(1, clean.length);
     return true;
   }
   if (kokoroUp === null) await probeTts();
@@ -145,10 +146,13 @@ export async function speak(
     audio.addEventListener("timeupdate", () => {
       const total = audio.duration;
       if (Number.isFinite(total) && total > 0) {
-        onProgress(Math.max(0, Math.min(1, audio.currentTime / total)));
+        const fraction = Math.max(0, Math.min(1, audio.currentTime / total));
+        // Kokoro has no word boundaries; a character offset proportional to
+        // audio time is within ~a word for normal sentence lengths.
+        onProgress(fraction, Math.round(fraction * clean.length));
       }
     });
-    audio.addEventListener("ended", () => onProgress(1), { once: true });
+    audio.addEventListener("ended", () => onProgress(1, clean.length), { once: true });
   }
   // Poll the performer: pause halts the audio in place, resume continues it.
   const watch = setInterval(() => {

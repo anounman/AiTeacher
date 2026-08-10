@@ -9,6 +9,8 @@ import { loadMathJax } from "./MathWriteOn";
 import { findTarget as findMarkTarget } from "./MathMark";
 import { waitForDone } from "@/lib/teach/completion";
 import { performer, type PerformerStatus } from "@/lib/teach/performer";
+import { alignWriteToSpeech } from "@/lib/teach/alignment";
+import { voiceClock } from "@/lib/teach/voice-clock";
 import { describeHits, queryRegion } from "@/lib/teach/spatial";
 import { type DrawCue } from "@/lib/teach/timeline";
 import { planLessonTimeline } from "@/lib/teach/timeline-client";
@@ -19,7 +21,7 @@ import { shouldBlockTouchNavigation } from "@/lib/teach/input-arbitration";
 import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
 import { InkLayer, useInk, type InkColor } from "./InkLayer";
 import { captureInk } from "@/lib/teach/ink-capture";
-import { repairBoard } from "@/lib/teach/repair";
+import { repairBoard, repairLabels } from "@/lib/teach/repair";
 import {
   cancelSpeech,
   prefetchSpeech,
@@ -65,9 +67,10 @@ function actionTimeoutMs(action: TeachAction): number {
 
 const AWAITED = new Set(["latex", "text", "heading", "mark", "code", "write"]);
 const VOICED_SETTLE_MS = 1_100;
-// A cue never waits on the voice for longer than this. Speech synthesis can
-// stall, a browser can throttle a background tab, and a pen that waits forever
-// for a clock that stopped is a lesson that stops with it.
+// A cue never waits on a voice that has made NO progress for this long.
+// Speech synthesis can stall, a browser can throttle a background tab, and a
+// pen that waits forever for a clock that stopped is a lesson that stops with
+// it. Any reported voice progress resets the fuse.
 const CUE_WAIT_CAP_MS = 8_000;
 const SILENT_SETTLE_MS = 1_600;
 
@@ -188,6 +191,7 @@ export function TeachStage({
   onExit,
   personaControl,
   transcriptionAvailable = false,
+  onLessonAmended,
 }: {
   conversationId: string;
   baseMd: string;
@@ -204,6 +208,9 @@ export function TeachStage({
   onExit: () => void;
   personaControl?: ReactNode;
   transcriptionAvailable?: boolean;
+  // Mid-lesson QA appended a correction to the lesson: the owner updates the
+  // message content so `events` grows and the pump plays the correction.
+  onLessonAmended?: (messageId: string, correctionMd: string) => void;
 }) {
   const [muted, setMuted] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -277,7 +284,9 @@ export function TeachStage({
   // a final pass; idempotent, so the cadence is free.
   const repairNow = useCallback(() => {
     const world = worldRef.current;
-    if (world) repairBoard(world, canvasVp.k || 1);
+    if (!world) return;
+    repairBoard(world, canvasVp.k || 1);
+    repairLabels(world, canvasVp.k || 1);
   }, [canvasVp.k]);
   useEffect(() => {
     const interval = setInterval(repairNow, 900);
@@ -627,10 +636,17 @@ export function TeachStage({
   eventsRef.current = events;
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
+  const liveMdRef = useRef(liveMd);
+  liveMdRef.current = liveMd;
+  const onLessonAmendedRef = useRef(onLessonAmended);
+  onLessonAmendedRef.current = onLessonAmended;
+  // One QA pass per lesson, fired once ~60% has been delivered.
+  const qaFiredRef = useRef(false);
 
   useEffect(() => {
     setLiveEntries([]);
     prefetchedRef.current = 0;
+    qaFiredRef.current = false;
     cancelSpeech();
     setDirectorStatus("idle");
   }, [liveKey]);
@@ -760,6 +776,7 @@ export function TeachStage({
           );
         }
         performer.begin(myKey, eventsRef.current.length, cursor);
+        voiceClock.reset();
 
         // Ink-aware placement: flow items know nothing about the student's
         // absolutely-positioned pen strokes, so a reply used to write straight
@@ -818,9 +835,23 @@ export function TeachStage({
             if (beat.speech.length === 0) performer.activate(myKey, cue.eventIndex);
             const action = cue.event.action;
             const key = `l-${myKey}-${cue.eventIndex}`;
+            // Word graph: written words edge to the spot in this beat's
+            // narration where they are spoken (against the same cleaned text
+            // the TTS reads, so character offsets line up). HandWrite reveals
+            // each cued word when the voice clock passes its edge.
+            const wordCues =
+              action.type === "write"
+                ? alignWriteToSpeech(
+                    action.markup,
+                    beat.speech.map((s) => ({
+                      eventIndex: s.eventIndex,
+                      text: speakable(s.event.text),
+                    })),
+                  )
+                : [];
             setLiveEntries((entries) => {
               if (entries.some((entry) => entry.key === key)) return entries;
-              return [...entries, { action, key, live: true, anchor }];
+              return [...entries, { action, key, live: true, anchor, wordCues }];
             });
             // Pointing at earlier work: bring the camera to the thing being
             // marked (it can be far above the newest writing) as soon as the
@@ -867,12 +898,15 @@ export function TeachStage({
                 // reaches 60%, not when a words-per-minute estimate says so.
                 const base = cue.atMs;
                 const span = Math.max(1, cue.estimatedDurationMs);
-                doneOk = await speak(cue.event.text, (fraction) => {
+                doneOk = await speak(cue.event.text, (fraction, charIndex) => {
                   spokenMs = base + fraction * span;
+                  voiceClock.set(cue.eventIndex, charIndex);
                 });
               }
               spokenMs = cue.atMs + cue.estimatedDurationMs;
             }
+            // Words cued to this beat must never outlive its narration.
+            voiceClock.set(beat.to, 0);
           })();
 
           const visualTask = (async () => {
@@ -882,11 +916,20 @@ export function TeachStage({
               // actually reached this cue's position. Without one (muted, or a
               // beat with no narration) fall back to the planned timing.
               if (beat.speech.length) {
+                // The cap detects a STALLED clock, not a distant cue: cues are
+                // now anchored to the introducing sentence, which can sit many
+                // seconds into a beat, so any voice progress resets the fuse.
                 let waited = 0;
+                let lastSpokenMs = spokenMs;
                 while (spokenMs < cue.atMs && !superseded() && waited < CUE_WAIT_CAP_MS) {
                   if (speechFinished) break;
                   await new Promise((r) => setTimeout(r, 60));
-                  if (!performer.paused()) waited += 60;
+                  if (spokenMs !== lastSpokenMs) {
+                    lastSpokenMs = spokenMs;
+                    waited = 0;
+                  } else if (!performer.paused()) {
+                    waited += 60;
+                  }
                 }
                 if (superseded()) break;
                 launchDraw(cue);
@@ -942,6 +985,32 @@ export function TeachStage({
             cursor,
             lastDraw ? describeAction(lastDraw.event.action) : undefined,
           );
+
+          // Mid-lesson QA: once ~60% is delivered, have the reason slot
+          // re-check what was said and written. Fire-and-forget beside
+          // playback; a bad verdict appends a short spoken correction to the
+          // lesson, which this same pump then performs (events grow → the
+          // pump effect re-runs from the current cursor).
+          if (!qaFiredRef.current && cursor >= eventsRef.current.length * 0.6) {
+            qaFiredRef.current = true;
+            void fetch("/api/teach/qa", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ lessonMd: liveMdRef.current, messageId: myKey }),
+            })
+              .then((res) => (res.ok ? res.json() : { ok: true }))
+              .then((verdict: { ok?: boolean; correctionMd?: string }) => {
+                if (
+                  verdict?.ok === false &&
+                  typeof verdict.correctionMd === "string" &&
+                  verdict.correctionMd.trim() &&
+                  !superseded()
+                ) {
+                  onLessonAmendedRef.current?.(myKey, verdict.correctionMd);
+                }
+              })
+              .catch(() => {});
+          }
         }
         performer.finish(myKey);
       } finally {

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { TeachAction } from "@/lib/teach/protocol";
 import type { WorldRect } from "@/lib/teach/performer";
+import type { WordCue } from "@/lib/teach/alignment";
 import { StrokeText } from "./StrokeText";
 import { MathWriteOn } from "./MathWriteOn";
 import { MathMark } from "./MathMark";
@@ -20,6 +21,9 @@ export interface BoardEntry {
   // These entries render in a margin aside beside that spot instead of the
   // main column — like a teacher annotating next to earlier work.
   anchor?: WorldRect | null;
+  // Word graph edges for write actions: written word index → where the voice
+  // says it. HandWrite reveals each cued word as the voice clock passes it.
+  wordCues?: WordCue[];
 }
 
 // Board content on the infinite canvas (TeachStage supplies paper/pan/zoom/
@@ -146,6 +150,7 @@ function BoardItem({ entry }: { entry: BoardEntry }) {
           color={action.color}
           itemKey={live ? key : undefined}
           instant={!live}
+          wordCues={live ? entry.wordCues : undefined}
         />
       );
     case "code":

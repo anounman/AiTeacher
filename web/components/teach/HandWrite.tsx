@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { signalDone } from "@/lib/teach/completion";
 import { performer } from "@/lib/teach/performer";
 import { register } from "@/lib/teach/spatial";
+import { voiceClock } from "@/lib/teach/voice-clock";
+import type { WordCue } from "@/lib/teach/alignment";
 
 // Board content written by the mathwriter engine (real handwritten glyphs,
 // via /api/handwrite → python sidecar). The PNG is revealed band-by-band
@@ -232,12 +234,16 @@ export function HandWrite({
   color = "ink",
   itemKey,
   instant = false,
+  wordCues,
 }: {
   markup: string;
   writeId: string;
   color?: "ink" | "red" | "blue";
   itemKey?: string;
   instant?: boolean;
+  // Word graph edges (lib/teach/alignment): when present, each cued word
+  // reveals as the voice clock passes the spot where it is spoken.
+  wordCues?: WordCue[];
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
@@ -332,22 +338,61 @@ export function HandWrite({
           ctx.drawImage(img, 0, 0);
           return;
         }
+        const waitUnpaused = async () => {
+          while (performer.paused()) await new Promise((r) => setTimeout(r, 150));
+        };
+        const sweepBandTo = async (b: Band, fromX: number, toX: number, ms: number) => {
+          const pxPerMs = Math.max(0.55, (toX - fromX) / ms);
+          let x = fromX;
+          while (x < toX) {
+            await waitUnpaused();
+            await new Promise((r) => requestAnimationFrame(r));
+            x = Math.min(toX, x + pxPerMs * 16);
+            ctx.clearRect(0, b.y0, x, b.y1 - b.y0);
+            ctx.drawImage(img, 0, b.y0, x, b.y1 - b.y0, 0, b.y0, x, b.y1 - b.y0);
+          }
+        };
+
+        // Word-synced reveal: each written word waits for the voice to say it
+        // (the word graph built in the pump), so pen and voice move together
+        // word by word. Diagrams and sparse graphs fall back to the paced
+        // band wipe below.
+        if (!diagram && wordCues?.length) {
+          const cueByWord = new Map(wordCues.map((cue) => [cue.word, cue]));
+          let flatBase = 0;
+          for (let bi = 0; bi < bands.length; bi++) {
+            const b = bands[bi]!;
+            const boxes = detectWords(img, b);
+            const lineWordCount =
+              (markupLines[bi] ?? "").split(/\s+/).filter(Boolean).length || boxes.length;
+            let revealedX = 0;
+            for (let wi = 0; wi < boxes.length; wi++) {
+              const cue = cueByWord.get(flatBase + Math.min(wi, lineWordCount - 1));
+              if (cue) {
+                // Stall fuse only — normally the voice clock arrives first.
+                let waited = 0;
+                while (!voiceClock.reached(cue.eventIndex, cue.charIndex) && waited < 5000) {
+                  await new Promise((r) => setTimeout(r, 60));
+                  if (!performer.paused()) waited += 60;
+                }
+              }
+              await sweepBandTo(b, revealedX, boxes[wi]!.x1 + 2, 240);
+              revealedX = boxes[wi]!.x1 + 2;
+            }
+            // Trailing ink the word detector missed.
+            await sweepBandTo(b, revealedX, b.x1, 160);
+            flatBase += lineWordCount;
+            await new Promise((r) => setTimeout(r, 60));
+          }
+          return;
+        }
+
         // Pen wipe: reveal each band left→right at a steady px/ms pace, but
         // never longer than ~900ms per band — a wide diagram band otherwise
         // drew for seconds while the voice moved on to the next sentence.
-        const PX_PER_MS = 0.55;
         for (const b of bands) {
           const bw = b.x1 - b.x0;
-          const pxPerMs = Math.max(PX_PER_MS, bw / 900);
-          let revealed = 0;
-          while (revealed < bw) {
-            while (performer.paused()) await new Promise((r) => setTimeout(r, 150));
-            await new Promise((r) => requestAnimationFrame(r));
-            revealed = Math.min(bw, revealed + pxPerMs * 16);
-            const sw = b.x0 + revealed;
-            ctx.clearRect(0, b.y0, sw, b.y1 - b.y0);
-            ctx.drawImage(img, 0, b.y0, sw, b.y1 - b.y0, 0, b.y0, sw, b.y1 - b.y0);
-          }
+          await sweepBandTo(b, b.x0, b.x1, Math.min(900, bw / 0.55));
           await new Promise((r) => setTimeout(r, 120));
         }
       } catch {

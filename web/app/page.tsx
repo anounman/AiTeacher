@@ -653,6 +653,18 @@ export default function Page() {
         onRetry={retry}
         onExit={() => changeMode("chat")}
         transcriptionAvailable={transcriptionAvailable}
+        onLessonAmended={(messageId, correctionMd) =>
+          // The QA route already persisted the appended content; mirroring it
+          // into state grows the live event list so the performer plays the
+          // correction. Guard against double-append on a race.
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === messageId && !m.content.endsWith(correctionMd)
+                ? { ...m, content: `${m.content}\n\n${correctionMd}` }
+                : m,
+            ),
+          )
+        }
         personaControl={
           <PersonaEditor
             key={conversation.id}

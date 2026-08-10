@@ -107,11 +107,13 @@ def _plan_beat(events: list[dict], start: int, end: int) -> LessonBeat:
             draws,
         )
 
-    # Spread visuals through the narration rather than starting every drawing
-    # at once. The pen starts almost immediately with the voice — a teacher
-    # talks WHILE drawing, not before it — with a short tail for the last
-    # stroke before the next beat.
-    cue_window_start = min(120.0, speech_at_ms * 0.08)
+    # The prompt has the model introduce a board item in the spoken segment
+    # immediately before its fence, so the beat's LAST sentence is the one that
+    # names what the pen writes. Anchor the cue window there: the pen starts as
+    # the voice starts that sentence — writing WHAT is being said, not filling
+    # dead air during earlier sentences — with a short tail before the next beat.
+    intro = speech[-1]
+    cue_window_start = intro.at_ms + min(120.0, intro.estimated_duration_ms * 0.08)
     cue_window_end = max(cue_window_start, speech_at_ms - 360)
     cue_window_ms = cue_window_end - cue_window_start
     # When a model emits many tiny board actions, batch them into a bounded

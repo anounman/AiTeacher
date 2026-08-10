@@ -997,6 +997,9 @@ html[data-theme="dark"] .transcript-user-message { color: var(--ink); }
 }
 .board-aside .board-item { margin-top: 14px; }
 .board-aside .board-item:first-child { margin-top: 0; }
+/* Mark labels are the repair pass's second movable layer — same eased slide
+   so the hard no-label-on-ink rule is visibly enforced on the canvas. */
+.mark-note { transition: transform 320ms cubic-bezier(0.4, 0, 0.2, 1); }
 .board-aside .handwrite canvas,
 .board-aside .code-board { max-width: 100% !important; height: auto !important; }
 .board-aside-tick {

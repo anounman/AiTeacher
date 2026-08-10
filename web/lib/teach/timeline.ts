@@ -76,11 +76,13 @@ function planBeat(events: TeachEvent[], from: number, to: number): LessonBeat {
     };
   }
 
-  // Spread visuals through the narration rather than starting every drawing
-  // at once. The pen starts almost immediately with the voice — a teacher
-  // talks WHILE drawing, not before it — with a short tail for the last
-  // stroke before the next beat.
-  const cueWindowStart = Math.min(120, speechAtMs * 0.08);
+  // The prompt has the model introduce a board item in the spoken segment
+  // immediately before its fence, so the beat's LAST sentence is the one that
+  // names what the pen writes. Anchor the cue window there: the pen starts as
+  // the voice starts that sentence — writing WHAT is being said, not filling
+  // dead air during earlier sentences — with a short tail before the next beat.
+  const intro = speech[speech.length - 1]!;
+  const cueWindowStart = intro.atMs + Math.min(120, intro.estimatedDurationMs * 0.08);
   const cueWindowEnd = Math.max(cueWindowStart, speechAtMs - 360);
   const cueWindowMs = cueWindowEnd - cueWindowStart;
   // When a model emits many tiny board actions, batch them into a bounded

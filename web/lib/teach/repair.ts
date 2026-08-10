@@ -90,3 +90,46 @@ export function repairBoard(world: HTMLElement, k: number): number {
   });
   return moved;
 }
+
+// v2 hard rule: a mark label never sits on ink. Ink = every handwriting
+// canvas and stroke svg on the board; labels are the second movable layer
+// and slide down (eased by CSS, so the student SEES the board fix itself)
+// to the first slot with MIN_INK_GAP clearance.
+const MIN_INK_GAP = 10;
+
+export function repairLabels(world: HTMLElement, k: number): number {
+  const origin = world.getBoundingClientRect();
+  const scale = k || 1;
+  const toWorld = (r: DOMRect): Box => ({
+    x: (r.left - origin.left) / scale,
+    y: (r.top - origin.top) / scale,
+    w: r.width / scale,
+    h: r.height / scale,
+  });
+
+  const labels = Array.from(world.querySelectorAll<HTMLElement>(".mark-note"));
+  if (!labels.length) return 0;
+
+  const ink = Array.from(
+    world.querySelectorAll<HTMLElement>(".board-item canvas, .board-item .stroke-row svg"),
+  )
+    .map((el) => toWorld(el.getBoundingClientRect()))
+    .filter((b) => b.w > 4 && b.h > 4);
+
+  const bases = labels.map((el) => {
+    const r = toWorld(el.getBoundingClientRect());
+    const applied = Number(el.dataset.repairDy ?? "0");
+    return { el, box: { ...r, y: r.y - applied } };
+  });
+  bases.sort((a, b) => a.box.y - b.box.y);
+
+  const shifts = planShifts(ink, bases.map((b) => b.box), MIN_INK_GAP);
+  let moved = 0;
+  bases.forEach(({ el }, i) => {
+    const dy = Math.round(shifts[i]!);
+    if (Number(el.dataset.repairDy ?? "0") !== dy) moved++;
+    el.dataset.repairDy = String(dy);
+    el.style.transform = dy ? `translateY(${dy}px)` : "";
+  });
+  return moved;
+}

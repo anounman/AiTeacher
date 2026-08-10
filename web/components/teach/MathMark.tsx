@@ -121,8 +121,12 @@ export function findTarget(
       container.querySelector("svg")?.querySelector(`[id="${CSS.escape(namedPart)}"]`);
     return part ? { container, el: part } : null;
   }
-  const svg = container.querySelector("svg");
-  return { container, el: svg ?? container };
+  // Whole item: the real content — MathJax svg or HandWrite canvas. The
+  // container div itself is a trap: it exists (empty, ~2px) the moment React
+  // mounts, long before the sidecar render appends the canvas, and a mark
+  // measured then circles a zero-size rect at the origin.
+  const content = container.querySelector("svg, canvas");
+  return { container, el: content ?? container };
 }
 
 type Rect = { x: number; y: number; w: number; h: number };
@@ -141,13 +145,19 @@ function freeSpotAround(
   target: Rect,
   w: number,
   h: number,
+  k = 1, // canvas zoom: client rects are scaled by it, local px are not
 ): { x: number; y: number } {
   const cRect = container.getBoundingClientRect();
   const obstacles: Rect[] = [];
   container.querySelectorAll<HTMLElement>("[data-part], .mark-note").forEach((el) => {
     const r = el.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) return;
-    const box = { x: r.left - cRect.left, y: r.top - cRect.top, w: r.width, h: r.height };
+    const box = {
+      x: (r.left - cRect.left) / k,
+      y: (r.top - cRect.top) / k,
+      w: r.width / k,
+      h: r.height / k,
+    };
     // The marked element itself is not an obstacle for its own label.
     if (overlapArea(box, target) > target.w * target.h * 0.6) return;
     obstacles.push(box);
@@ -205,39 +215,64 @@ export function MathMark({
     labelHost.dataset.started = "1";
     (async () => {
       try {
-        // Equation may still be materializing (MathJax load) — poll.
-        const found = await waitFor(() => findTarget(target, itemKey), instant ? 50 : 20, 300);
+        // Equation may still be materializing (MathJax load, sidecar render)
+        // — poll until the target EXISTS AND HAS REAL GEOMETRY. Marking a
+        // rect that hasn't been drawn yet produces a tiny circle around
+        // nothing.
+        const found = await waitFor(() => {
+          const hit = findTarget(target, itemKey);
+          if (!hit) return null;
+          const r = hit.el.getBoundingClientRect();
+          return r.width > 4 && r.height > 4 ? hit : null;
+        }, instant ? 50 : 20, 300);
         if (!found) {
           setMissing(true);
           return;
         }
         const { container, el } = found;
-        const cRect = container.getBoundingClientRect();
-        const tRect = el.getBoundingClientRect();
-        const x = tRect.left - cRect.left;
-        const y = tRect.top - cRect.top;
+        // Client rects are scaled by the infinite-canvas zoom, but the overlay
+        // is positioned in the container's LOCAL px. Divide the zoom out or
+        // every circle/label lands shifted and shrunken whenever k ≠ 1 (the
+        // camera-follow zoom mid-lesson) — the "circle misses its line, label
+        // on top of the writing" board.
+        const measure = () => {
+          const cRect = container.getBoundingClientRect();
+          const k = container.offsetWidth ? cRect.width / container.offsetWidth : 1;
+          // Re-resolve: the write's canvas can replace what we first found.
+          const live = findTarget(target, itemKey)?.el ?? el;
+          const tRect = live.getBoundingClientRect();
+          return {
+            k,
+            cw: cRect.width / k,
+            ch: cRect.height / k,
+            x: (tRect.left - cRect.left) / k,
+            y: (tRect.top - cRect.top) / k,
+            tw: tRect.width / k,
+            th: tRect.height / k,
+          };
+        };
+        const pathFor = (g: ReturnType<typeof measure>) =>
+          style === "underline"
+            ? wobblyLine(g.x - 3, g.x + g.tw + 3, g.y + g.th + 4)
+            : style === "box"
+              ? wobblyBox(g.x - 6, g.y - 5, g.tw + 12, g.th + 10)
+              : wobblyEllipse(g.x + g.tw / 2, g.y + g.th / 2, g.tw / 2 + 10, g.th / 2 + 8);
+
+        let geo = measure();
+        const { x, y, tw, th, k } = geo;
         const stroke = COLOR_VAR[color];
+        let noteEl: HTMLDivElement | null = null;
 
         // Overlay svg spanning the container, drawn above the equation.
         container.style.position = "relative";
         const overlay = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         overlay.setAttribute("class", "math-mark-overlay");
-        overlay.setAttribute("width", String(cRect.width));
-        overlay.setAttribute("height", String(cRect.height));
+        overlay.setAttribute("width", String(geo.cw));
+        overlay.setAttribute("height", String(geo.ch));
         overlay.style.cssText =
           "position:absolute;left:0;top:0;overflow:visible;pointer-events:none;";
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        const d =
-          style === "underline"
-            ? wobblyLine(x - 3, x + tRect.width + 3, y + tRect.height + 4)
-            : style === "box"
-              ? wobblyBox(x - 6, y - 5, tRect.width + 12, tRect.height + 10)
-              : wobblyEllipse(
-                  x + tRect.width / 2,
-                  y + tRect.height / 2,
-                  tRect.width / 2 + 10,
-                  tRect.height / 2 + 8,
-                );
+        const d = pathFor(geo);
         path.setAttribute("d", d);
         path.setAttribute("fill", "none");
         path.setAttribute("stroke", stroke);
@@ -266,9 +301,10 @@ export function MathMark({
           // emptiest side so it doesn't land on the neighbouring entity.
           const spot = freeSpotAround(
             container,
-            { x, y, w: tRect.width, h: tRect.height },
+            { x, y, w: tw, h: th },
             Math.min(190, label.length * 7 + 12),
             18,
+            k,
           );
           const note = document.createElement("div");
           note.className = "mark-note";
@@ -287,7 +323,41 @@ export function MathMark({
             note.textContent = label;
             note.className = "mono text-[12px] italic";
           }
+          noteEl = note;
         }
+
+        // Mark repair pass: the target can grow AFTER the mark drew (sidecar
+        // canvas landing late, reveal widening a band, a repair shift). The
+        // board repair loop only moves asides — a mark must re-fit itself.
+        // Geometry only, bounded: re-measure on the repair cadence for 12s,
+        // redraw circle + re-park label when the target drifts.
+        void (async () => {
+          for (let i = 0; i < 13; i++) {
+            await new Promise((r) => setTimeout(r, 900));
+            const now = measure();
+            const drift =
+              Math.abs(now.x - geo.x) + Math.abs(now.y - geo.y) +
+              Math.abs(now.tw - geo.tw) + Math.abs(now.th - geo.th);
+            if (drift < 4 || now.tw < 4) continue;
+            geo = now;
+            overlay.setAttribute("width", String(geo.cw));
+            overlay.setAttribute("height", String(geo.ch));
+            path.style.strokeDasharray = "";
+            path.style.strokeDashoffset = "";
+            path.setAttribute("d", pathFor(geo));
+            if (noteEl && label) {
+              const respot = freeSpotAround(
+                container,
+                { x: geo.x, y: geo.y, w: geo.tw, h: geo.th },
+                Math.min(190, label.length * 7 + 12),
+                18,
+                now.k,
+              );
+              noteEl.style.left = `${respot.x}px`;
+              noteEl.style.top = `${respot.y}px`;
+            }
+          }
+        })();
       } finally {
         if (itemKey) signalDone(itemKey);
       }

@@ -42,6 +42,23 @@ test("draw cues are monotonic and stay inside the narration window", () => {
   assert.ok(beat.draws[2]!.atMs < beat.estimatedDurationMs, "last visual starts before speech ends");
 });
 
+test("draws anchor to the sentence that introduces them, not the beat start", () => {
+  const preamble = speak("First we recap what we already know from last time in some detail.");
+  const intro = speak("Now let me write the integration by parts formula on the board.");
+  const [beat] = buildLessonTimeline([preamble, intro, draw("∫u dv = uv - ∫v du")]);
+  assert.ok(beat);
+  const introCue = beat.speech.at(-1)!;
+  assert.ok(introCue.atMs > 0, "intro sentence is not the first");
+  assert.ok(
+    beat.draws[0]!.atMs >= introCue.atMs,
+    "pen waits for the introducing sentence instead of writing during the recap",
+  );
+  assert.ok(
+    beat.draws[0]!.atMs < introCue.atMs + introCue.estimatedDurationMs,
+    "pen starts while that sentence is being spoken",
+  );
+});
+
 test("dense visuals batch into camera cues instead of interrupting every tween", () => {
   const events = [
     speak("This explanation is deliberately long enough to create several well spaced visual cue moments."),
