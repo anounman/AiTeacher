@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { visualizeConcept, visualSlotModel } from "@/lib/visual-engine-server";
+import { checkLayout } from "@/lib/visual-engine-guard";
 
 // POST { query, courseHint? } -> { doc, graph, meta }
 //
@@ -39,6 +40,9 @@ export async function POST(req: Request) {
         truncated: produce.truncated,
         diagramType: doc.diagramType,
         template: doc.template ?? null,
+        // Geometry, not a vision model: the layout is deterministic code, so
+        // overlap is arithmetic we already have. See lib/visual-engine-guard.
+        layoutProblems: checkLayout(graph),
       },
     });
   } catch (err) {

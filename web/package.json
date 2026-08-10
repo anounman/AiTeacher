@@ -11,7 +11,7 @@
     "test:mastery": "node --import tsx --test lib/mastery/model.test.ts",
     "test:retrieval": "node --import tsx --test lib/retrieval/index.test.ts",
     "test:teach": "node --import tsx --test lib/teach/*.test.ts lib/learner/*.test.ts app/api/tts/route.test.ts",
-    "test:visual": "node --import tsx --test lib/visual-engine/schema.test.ts lib/visual-engine/subjects.test.ts lib/visual-engine/registry.test.ts lib/visual-engine/repair.test.ts lib/visual-engine/layout.test.ts lib/visual-engine/render.test.ts lib/visual-engine/binarytree.test.ts lib/visual-engine/smoke.test.ts",
+    "test:visual": "node --import tsx --test lib/visual-engine/schema.test.ts lib/visual-engine/subjects.test.ts lib/visual-engine/registry.test.ts lib/visual-engine/repair.test.ts lib/visual-engine/layout.test.ts lib/visual-engine/render.test.ts lib/visual-engine/binarytree.test.ts lib/visual-engine/smoke.test.ts lib/visual-engine-guard.test.ts",
     "sync:visual-engine": "bash scripts/sync-visual-engine.sh"
   },
   "dependencies": {

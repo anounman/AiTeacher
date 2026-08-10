@@ -8,6 +8,7 @@ import {
   visualInputFromLesson,
 } from "@/lib/teach/visual-lesson";
 import { visualizeConcept } from "@/lib/visual-engine-server";
+import { checkLayout } from "@/lib/visual-engine-guard";
 
 type Body = { lessonMd?: unknown; lessonId?: unknown; messageId?: unknown };
 
@@ -38,6 +39,14 @@ export async function POST(req: Request) {
     if (topic) {
       try {
         const { doc, graph } = await visualizeConcept(topic, { timeoutMs: 30_000 });
+        const layoutProblems = checkLayout(graph);
+        // A diagram that fails geometry is worse than the hand-drawn board
+        // items the lesson already has, so fall through to the director
+        // rather than putting overlapping boxes in front of a student.
+        if (layoutProblems.length) {
+          console.warn("[teach/visualize] engine layout rejected:", layoutProblems);
+          throw new Error(layoutProblems.map((p) => p.detail).join("; "));
+        }
         const directed = appendConceptGraph(lessonMd, graph, {
           title: doc.title,
           summary: doc.summary,
