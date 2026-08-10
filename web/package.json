@@ -10,7 +10,9 @@
     "test:fsrs": "node --import tsx --test lib/fsrs/algorithm.test.ts",
     "test:mastery": "node --import tsx --test lib/mastery/model.test.ts",
     "test:retrieval": "node --import tsx --test lib/retrieval/index.test.ts",
-    "test:teach": "node --import tsx --test lib/teach/*.test.ts lib/learner/*.test.ts app/api/tts/route.test.ts"
+    "test:teach": "node --import tsx --test lib/teach/*.test.ts lib/learner/*.test.ts app/api/tts/route.test.ts",
+    "test:visual": "node --import tsx --test lib/visual-engine/schema.test.ts lib/visual-engine/subjects.test.ts lib/visual-engine/registry.test.ts lib/visual-engine/repair.test.ts lib/visual-engine/layout.test.ts lib/visual-engine/render.test.ts lib/visual-engine/binarytree.test.ts lib/visual-engine/smoke.test.ts",
+    "sync:visual-engine": "bash scripts/sync-visual-engine.sh"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.23",
@@ -20,6 +22,7 @@
     "ai": "^7.0.52",
     "better-sqlite3": "^13.0.3",
     "d3-force": "^3.0.0",
+    "dagre": "^0.8.5",
     "html-to-text": "^10.0.0",
     "katex": "0.18.1",
     "mathjax": "^3.2.2",
@@ -32,6 +35,7 @@
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
+    "roughjs": "^4.6.6",
     "tesseract.js": "^7.0.0",
     "unpdf": "^1.8.0",
     "zod": "^4.4.3"
@@ -40,11 +44,14 @@
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^9.6.0",
     "@types/d3-force": "^3.0.10",
+    "@types/dagre": "^0.7.54",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "ts-fsrs": "^4.7.1",
     "tsx": "^4.23.9",

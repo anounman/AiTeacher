@@ -1,0 +1,4 @@
+{
+  "//": "Vendored from github.com/JayanshJ/study-visual-engine by web/scripts/sync-visual-engine.sh. Do not hand-edit: changes belong upstream. 'type: module' scopes this directory to ESM because the engine is written as ESM while web/ is CJS.",
+  "type": "module"
+}
