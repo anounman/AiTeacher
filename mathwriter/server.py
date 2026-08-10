@@ -13,6 +13,7 @@ import base64
 import io
 import json
 import os
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -33,8 +34,34 @@ def _crop_alpha(img: Image.Image, pad: int = 6) -> Image.Image:
     if not bbox:
         return img
     x0, y0, x1, y1 = bbox
-    return img.crop((max(0, x0 - pad), max(0, y0 - pad),
-                     min(img.width, x1 + pad), min(img.height, y1 + pad)))
+    box = (max(0, x0 - pad), max(0, y0 - pad),
+           min(img.width, x1 + pad), min(img.height, y1 + pad))
+    out = img.crop(box)
+    # Keep named part boxes aligned with the cropped image.
+    parts = img.info.get('parts')
+    if parts:
+        out.info['parts'] = [
+            {**p, 'x': p['x'] - box[0], 'y': p['y'] - box[1]} for p in parts
+        ]
+    return out
+
+
+# Deliberate colors a diagram may use (see diagrams_extra.PALETTE). Recoloring
+# used to flatten every non-yellow pixel to one ink color, so a red "this is
+# the bug" arrow came out the same shade as everything else. Now each pixel is
+# classified: nearest to DEFAULT_INK → it is ordinary ink and gets themed;
+# nearest to a semantic color → that color was chosen on purpose, keep it.
+DEFAULT_INK = np.array([15, 70, 180], dtype=np.int32)
+SEMANTIC_INKS = np.array(
+    [
+        [196, 60, 50],    # red    — failure, violation, the anomaly
+        [30, 140, 80],    # green  — correct, committed, safe
+        [200, 140, 20],   # amber  — warning, waiting, blocked
+        [140, 70, 180],   # violet — a second actor / alternative path
+        [255, 255, 100],  # highlight fill
+    ],
+    dtype=np.int32,
+)
 
 
 def _recolor(img: Image.Image, hex_color: str) -> Image.Image:
@@ -42,16 +69,111 @@ def _recolor(img: Image.Image, hex_color: str) -> Image.Image:
     g = int(hex_color[3:5], 16)
     b = int(hex_color[5:7], 16)
     arr = np.ascontiguousarray(np.asarray(img.convert("RGBA"), dtype=np.uint8)).copy()
-    # Keep [DRAW] HIGHLIGHT rectangles yellow; recolor all ink (incl. light
-    # fills, which become a subtle theme-colored tint).
-    keep = (arr[..., 0] > 200) & (arr[..., 1] > 200) & (arr[..., 2] < 160)
+    rgb = arr[..., :3].astype(np.int32)
+    d_ink = ((rgb - DEFAULT_INK) ** 2).sum(-1)
+    d_sem = ((rgb[..., None, :] - SEMANTIC_INKS[None, None, :, :]) ** 2).sum(-1).min(-1)
+    keep = (d_sem < d_ink) & (arr[..., 3] > 0)
     arr[~keep, 0] = r
     arr[~keep, 1] = g
     arr[~keep, 2] = b
     return Image.fromarray(arr)
 
 
+def _has_semantic_color(img: Image.Image) -> bool:
+    """True when the drawing deliberately uses palette colors — the client
+    then skips its dark-mode invert, which would turn red into cyan."""
+    arr = np.asarray(img.convert("RGBA"))
+    rgb = arr[..., :3].astype(np.int32)
+    d_ink = ((rgb - DEFAULT_INK) ** 2).sum(-1)
+    # Highlight yellow is chrome, not a semantic ink — exclude it here.
+    d_sem = ((rgb[..., None, :] - SEMANTIC_INKS[None, None, :4, :]) ** 2).sum(-1).min(-1)
+    return bool(((d_sem < d_ink) & (arr[..., 3] > 40)).sum() > 24)
+
+
+# A write action that is nothing but one [G] diagram renders through the
+# diagram engine directly instead of the page layout engine: same pixels, but
+# the engine's named part boxes survive (page layout would lose the offset),
+# so the board can point at "erd#Doctor".
+_SOLO_G = re.compile(r"^\s*\[G\]\s*(\{.*\})\s*\[/G\]\s*$", re.DOTALL)
+
+
+def render_markup_svg(markup: str, scale: float) -> dict:
+    """Vector render: the same layout, emitted as SVG instead of pixels.
+
+    Returns the SVG plus EXACT line/word geometry straight from layout — the
+    client used to recover that by scanning the raster's alpha channel, which
+    was both slower and less accurate.
+
+    Colour is deliberately absent: ink is `currentColor`, so theming happens
+    in CSS and the render is colour-independent (one cache entry, instant
+    theme switches).
+    """
+    from svg_canvas import SVGCanvas, vector_glyphs
+
+    with _lock:
+        glyphs = vector_glyphs(rd.load_glyphs())
+        pages = rd.render_pages(
+            markup,
+            page_size=(1300, 6000),
+            margin_top=30, margin_bottom=30, margin_left=20, margin_right_min=20,
+            scale=scale,
+            glyphs=glyphs,
+            canvas_factory=SVGCanvas,
+        )
+    if not pages:
+        return {"svg": "", "w": 0, "h": 0, "lines": []}
+    page = pages[0]
+    x0, y0, x1, y1 = page.bbox()
+    # Shift content so the viewBox starts at the origin; the client then
+    # positions overlays as plain percentages of width/height.
+    svg = page.to_svg(
+        viewbox=(0, 0, x1 - x0, y1 - y0), offset=(-x0, -y0), include_defs=False
+    )
+
+    def shift(box):
+        return {
+            "x": round(box["x"] - x0, 2),
+            "y": round(box["y"] - y0, 2),
+            "w": round(box["w"], 2),
+            "h": round(box["h"], 2),
+        }
+
+    lines = []
+    for line in page.lines():
+        entry = shift(line)
+        entry["words"] = [shift(word) for word in line["words"]]
+        lines.append(entry)
+    return {
+        "svg": svg,
+        "w": round(x1 - x0, 2),
+        "h": round(y1 - y0, 2),
+        "lines": lines,
+        # Which shared glyph defs this render needs — the client can verify
+        # its atlas covers them before injecting the markup.
+        "gids": page.used_glyphs,
+    }
+
+
 def render_markup(markup: str, scale: float, color: str) -> Image.Image:
+    solo = _SOLO_G.match(markup)
+    if solo:
+        try:
+            spec = json.loads(solo.group(1))
+        except (ValueError, TypeError):
+            spec = None
+        if isinstance(spec, dict) and spec.get("type"):
+            with _lock:
+                # render_pages draws [G] blocks at scale*0.75 — match it.
+                img, _bl = rd.render_diagram(spec, rd.load_glyphs(), scale=scale * 0.75)
+            img = _crop_alpha(img)
+            colored = _has_semantic_color(img)
+            if color:
+                parts = img.info.get("parts")
+                img = _recolor(img, color)
+                if parts:
+                    img.info["parts"] = parts
+            img.info["colored"] = colored
+            return img
     with _lock:
         # Ink only: swap the grid paper for a transparent sheet and skip scan
         # effects while we render (board supplies its own paper).
@@ -71,8 +193,10 @@ def render_markup(markup: str, scale: float, color: str) -> Image.Image:
         return Image.new("RGBA", (1, 1), (0, 0, 0, 0))
     img = pages[0]  # 6000px tall virtual page — board items never overflow it
     img = _crop_alpha(img)
+    colored = _has_semantic_color(img)
     if color:
         img = _recolor(img, color)
+    img.info["colored"] = colored
     return img
 
 
@@ -88,6 +212,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         if self.path == "/health":
             self._json(200, {"ok": True})
+        elif self.path == "/glyphs":
+            # The shared glyph atlas: every traced outline, fetched once per
+            # session. Generated on first call if it isn't on disk yet.
+            from vectorize_glyphs import load_or_build
+
+            self._json(200, load_or_build())
         else:
             self._json(404, {"error": "not found"})
 
@@ -104,6 +234,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"error": "empty markup"})
             scale = float(body.get("scale", 1.3))
             color = str(body.get("color", "#1f2020"))
+            # Opt-in vector path. The raster path stays the default until the
+            # client migration lands, and stays forever for /render_pdf.
+            if str(body.get("format", "png")).lower() == "svg":
+                return self._json(200, render_markup_svg(markup, scale))
             img = render_markup(markup, scale, color)
             buf = io.BytesIO()
             img.save(buf, format="PNG")
@@ -111,6 +245,12 @@ class Handler(BaseHTTPRequestHandler):
                 "png": base64.b64encode(buf.getvalue()).decode(),
                 "w": img.width,
                 "h": img.height,
+                # Named regions inside a diagram (entity boxes, relationship
+                # diamonds) so the board can point at one part of it.
+                "parts": img.info.get("parts") or [],
+                # The drawing uses deliberate palette colors — the client must
+                # not invert it for dark mode.
+                "colored": bool(img.info.get("colored")),
             })
         except Exception as exc:  # surface render bugs to the client visibly
             self._json(500, {"error": str(exc)})

@@ -49,7 +49,14 @@ interface ChatBody {
   web?: boolean;
   // Teach mode interruption context: the lesson being performed, how far it
   // got, and any board region the student marked (spatial-index description).
-  teachContext?: { lessonMd?: string; deliveredUpTo?: string; selection?: string };
+  teachContext?: {
+    lessonMd?: string;
+    deliveredUpTo?: string;
+    selection?: string;
+    // Ids + labels of everything currently drawn, so the model can point at
+    // earlier work by its real id instead of guessing one.
+    board?: string;
+  };
 }
 
 // Decide whether this turn warrants deeper reasoning. Authoring a document
@@ -323,8 +330,14 @@ export async function POST(req: Request) {
         : "";
     let teachBlock = "";
     const tc = body.teachContext;
-    if (tc && (tc.lessonMd || tc.selection)) {
+    if (tc && (tc.lessonMd || tc.selection || tc.board)) {
       const parts: string[] = ["\n\nLIVE TEACHING CONTEXT:"];
+      if (tc.board) {
+        parts.push(
+          `Already on the whiteboard (these ids are REAL — a mark action must use one of them verbatim, and ids further down the list are the most recent):\n${tc.board}`,
+          `To point at earlier work, emit a mark action targeting one of those ids — "id" for a whole item, "id#PartName" for a named diagram part (an ER entity box or relationship diamond), "id:L0" for a code line. Never invent an id that is not listed: a wrong id lands the annotation on the wrong drawing. Point at the SPECIFIC part you are talking about, never circle an entire diagram.`,
+        );
+      }
       if (tc.lessonMd) {
         parts.push(
           `You were mid-lesson. The student has seen it up to ${tc.deliveredUpTo ?? "an unknown point"}. The lesson resumes automatically after your reply — do NOT repeat or continue the lesson yourself.`,
@@ -337,7 +350,12 @@ export async function POST(req: Request) {
         );
       }
       parts.push(
-        "Answer the student's message briefly — a few spoken segments and at most 2 small board fences. Reference existing board items by their ids instead of rewriting them.",
+        tc.lessonMd || tc.selection
+          ? "Answer the student's message briefly — a few spoken segments and at most 2 small board fences. Reference existing board items by their ids instead of rewriting them."
+          : // Not an interruption: a follow-up about work already drawn. The
+            // failure to avoid is silently re-writing the same diagram lower
+            // down the board instead of walking the one already there.
+            "If the student is asking about something already on the board, do NOT redraw it. Walk them through the existing item: one short spoken segment per idea, each paired with a mark action pointing at the exact part you are describing. Only write something new when you are genuinely adding to the board.",
       );
       teachBlock = parts.join("\n");
     }
@@ -403,7 +421,11 @@ export async function POST(req: Request) {
         }
       },
     });
-    const primaryEffort = complex ? "high" : teachMode ? "low" : "medium";
+    // Teach turns are LATENCY-critical and always win the effort decision: a
+    // "check my work" message carries the vision transcription (>400 chars),
+    // which tripped the complex heuristic and silently escalated a quick
+    // board check to high-effort reasoning — tens of seconds of dead air.
+    const primaryEffort = teachMode ? "low" : complex ? "high" : "medium";
     let result = runModel(primaryEffort);
 
     // SSE stream of `data: <single-line-json>\n\n` events. The wire contract

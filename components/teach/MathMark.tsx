@@ -77,14 +77,23 @@ function smooth(pts: [number, number][]): string {
   return d;
 }
 
-// Target forms: "eqId" (whole item), "eqId#cssIdPart" (MathJax \cssId group),
-// "codeId:L2" (code line via data-part).
-function findTarget(target: string): { container: HTMLElement; el: Element } | null {
+// Target forms: "eqId" (whole item), "eqId#part" (a named diagram region such
+// as an ER entity box, or a MathJax \cssId group), "codeId:L2" (code line).
+//
+// Board ids are only unique within the lesson that wrote them — a second ER
+// diagram is happily called "erd" again. A plain querySelector then returned
+// the FIRST match, so re-explaining a new diagram drew every circle on the
+// OLD one. Resolution order: the mark's own message first, then the most
+// recent match on the board (never the oldest).
+export function findTarget(
+  target: string,
+  itemKey?: string,
+): { container: HTMLElement; el: Element } | null {
   let itemId = target;
-  let cssIdPart: string | null = null;
+  let namedPart: string | null = null;
   let linePart: string | null = null;
   if (target.includes("#")) {
-    [itemId, cssIdPart] = target.split("#") as [string, string];
+    [itemId, namedPart] = target.split("#") as [string, string];
   } else {
     const m = /^(.*):(L\d+)$/.exec(target);
     if (m) {
@@ -92,18 +101,75 @@ function findTarget(target: string): { container: HTMLElement; el: Element } | n
       linePart = m[2]!;
     }
   }
-  const container = document.querySelector<HTMLElement>(`[data-eq-id="${itemId}"]`);
-  if (!container) return null;
+
+  const all = Array.from(document.querySelectorAll<HTMLElement>(`[data-eq-id="${CSS.escape(itemId)}"]`));
+  if (!all.length) return null;
+  const msg = /^[a-z]+-(.+)-(?:\d+|ink-spacer)$/.exec(itemKey ?? "")?.[1];
+  const sameMessage = msg
+    ? all.filter((el) => el.closest(`[data-entry-key*="-${msg}-"]`))
+    : [];
+  const container = sameMessage.at(-1) ?? all.at(-1)!;
+
   if (linePart) {
     const line = container.querySelector(`[data-part="${linePart}"]`);
     return line ? { container, el: line } : null;
   }
-  const svg = container.querySelector("svg");
-  if (cssIdPart) {
-    const part = svg?.querySelector(`[id="${CSS.escape(cssIdPart)}"]`);
+  if (namedPart) {
+    // Named diagram region (data-part) first, then a MathJax \cssId group.
+    const part =
+      container.querySelector(`[data-part="${CSS.escape(namedPart)}"]`) ??
+      container.querySelector("svg")?.querySelector(`[id="${CSS.escape(namedPart)}"]`);
     return part ? { container, el: part } : null;
   }
+  const svg = container.querySelector("svg");
   return { container, el: svg ?? container };
+}
+
+type Rect = { x: number; y: number; w: number; h: number };
+
+const overlapArea = (a: Rect, b: Rect): number =>
+  Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) *
+  Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+
+/**
+ * Where to park an annotation label around `target` (container coordinates)
+ * so it covers as little as possible of the diagram's own parts and of labels
+ * already placed. Deterministic: right, above, below, then left.
+ */
+function freeSpotAround(
+  container: HTMLElement,
+  target: Rect,
+  w: number,
+  h: number,
+): { x: number; y: number } {
+  const cRect = container.getBoundingClientRect();
+  const obstacles: Rect[] = [];
+  container.querySelectorAll<HTMLElement>("[data-part], .mark-note").forEach((el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return;
+    const box = { x: r.left - cRect.left, y: r.top - cRect.top, w: r.width, h: r.height };
+    // The marked element itself is not an obstacle for its own label.
+    if (overlapArea(box, target) > target.w * target.h * 0.6) return;
+    obstacles.push(box);
+  });
+  const candidates = [
+    { x: target.x + target.w + 10, y: target.y + target.h / 2 - h / 2 },
+    { x: target.x + target.w / 2 - w / 2, y: target.y - h - 6 },
+    { x: target.x + target.w / 2 - w / 2, y: target.y + target.h + 6 },
+    { x: target.x - w - 10, y: target.y + target.h / 2 - h / 2 },
+  ];
+  let best = candidates[0]!;
+  let bestScore = Infinity;
+  for (const c of candidates) {
+    const box = { ...c, w, h };
+    const score = obstacles.reduce((sum, o) => sum + overlapArea(box, o), 0);
+    if (score < bestScore) {
+      bestScore = score;
+      best = c;
+      if (score === 0) break;
+    }
+  }
+  return best;
 }
 
 const waitFor = async <T,>(fn: () => T | null, tries: number, gapMs: number): Promise<T | null> => {
@@ -140,7 +206,7 @@ export function MathMark({
     (async () => {
       try {
         // Equation may still be materializing (MathJax load) — poll.
-        const found = await waitFor(() => findTarget(target), instant ? 50 : 20, 300);
+        const found = await waitFor(() => findTarget(target, itemKey), instant ? 50 : 20, 300);
         if (!found) {
           setMissing(true);
           return;
@@ -194,20 +260,32 @@ export function MathMark({
         }
 
         if (label) {
-          labelHost.style.color = stroke;
-          labelHost.style.maxWidth = "300px";
+          // The label belongs BESIDE the thing it names, like a teacher's
+          // margin scribble — rendering it in the flow column stacked every
+          // annotation into an unreadable list far from the diagram. Pick the
+          // emptiest side so it doesn't land on the neighbouring entity.
+          const spot = freeSpotAround(
+            container,
+            { x, y, w: tRect.width, h: tRect.height },
+            Math.min(190, label.length * 7 + 12),
+            18,
+          );
+          const note = document.createElement("div");
+          note.className = "mark-note";
+          note.style.cssText = `position:absolute;left:${spot.x}px;top:${spot.y}px;max-width:190px;color:${stroke};pointer-events:none;`;
+          container.appendChild(note);
           register({
             id: `${itemKey ?? target}/label`,
             kind: "label",
             itemKey: itemKey ?? target,
-            el: labelHost,
+            el: note,
             text: label,
           });
           try {
-            await writeLabel(labelHost, label, color);
+            await writeLabel(note, label, color);
           } catch {
-            labelHost.textContent = label;
-            labelHost.className += " mono text-[12px] italic";
+            note.textContent = label;
+            note.className = "mono text-[12px] italic";
           }
         }
       } finally {

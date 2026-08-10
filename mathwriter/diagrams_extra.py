@@ -257,47 +257,345 @@ def _find_port(inputs, gates, outputs, label, side='in', meta=None):
 #  Relational models / databases
 # ═══════════════════════════════════════════════════════════════════════
 
-def draw_er_diagram(entities, relationships, glyphs=None, scale=0.7):
-    """Draw an Entity-Relationship diagram.
+# Semantic palette shared by every auto-layout diagram. server.py preserves
+# these through theme recoloring (see SEMANTIC_INKS there), so a diagram can
+# use meaning-bearing color instead of one flat ink.
+PALETTE = {
+    'red': (196, 60, 50),
+    'green': (30, 140, 80),
+    'amber': (200, 140, 20),
+    'violet': (140, 70, 180),
+}
 
-    entities: list of {'name': 'Student', 'attrs': ['student_id PK', 'name'], 'x': 50, 'y': 80}
-    relationships: list of {'name': 'Enrolls', 'from': 'Student', 'to': 'Course', 'card': 'M:N'}
+
+def _color_of(spec, default=None):
+    """Resolve a spec's color name (or alert shorthand) to RGB."""
+    if isinstance(spec, dict):
+        if spec.get('alert') and not spec.get('color'):
+            return PALETTE['red']
+        name = spec.get('color')
+    else:
+        name = spec
+    if isinstance(name, str):
+        return PALETTE.get(name.strip().lower(), default)
+    return default
+
+
+def draw_sequence(actors, steps, glyphs=None, scale=0.7):
+    """Sequence diagram with FULLY AUTOMATIC layout — the visual for anything
+    happening over time between actors: transactions racing on shared data,
+    protocols, syscalls, two friends in one Google Doc. The missing picture
+    that used to come out as prose lines.
+
+    actors: ["T1", "Database", "T2"] (list of names; dicts with 'name' ok)
+    steps: ordered list of
+      {'from': 'T1', 'to': 'Database', 'label': 'write X=100'}   arrow
+      {'actor': 'T2', 'label': 'sees 100'}                       note on lane
+      {'label': 'DIRTY READ — value never existed'}              banner row
+      Any step may add 'alert': true → drawn red with an X marker.
     """
-    W, H = 700, 320
-    canvas = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    names = [a['name'] if isinstance(a, dict) else str(a) for a in actors if a]
+    names = [n for n in names if n]
+    if not names:
+        return Image.new('RGBA', (200, 60), (0, 0, 0, 0)), 30
+    # Per-actor colors: {"name": "Bob", "color": "violet"} tints that lane.
+    actor_color = {}
+    for a in actors:
+        if isinstance(a, dict) and a.get('name'):
+            c = _color_of(a)
+            if c:
+                actor_color[str(a['name'])] = c
 
-    # draw entities as rectangles
+    ALERT = PALETTE['red']
+    LABEL_S, ACTOR_S = 0.48, 0.58
+    STEP_H, TOP_H, PAD = 52, 46, 16
+
+    # Actor head boxes, sized to their names; lanes evenly spaced but never
+    # closer than the widest label between adjacent lanes demands.
+    heads = []
+    for n in names:
+        w = _render_text(n, glyphs, ACTOR_S)[0].size[0] + 24
+        heads.append({'name': n, 'w': w})
+    min_gap = 150
+    for s in steps or []:
+        lbl = str(s.get('label', ''))
+        if s.get('from') and s.get('to') and lbl:
+            lw = _render_text(lbl, glyphs, LABEL_S)[0].size[0]
+            span = abs(names.index(str(s['from'])) - names.index(str(s['to']))) \
+                if str(s.get('from')) in names and str(s.get('to')) in names else 1
+            if span:
+                min_gap = max(min_gap, lw // span + 40)
+    x = PAD
+    for h in heads:
+        h['cx'] = x + max(h['w'], 40) // 2
+        x = h['cx'] + max(min_gap // 2, h['w'] // 2 + 20)
+    # Recompute evenly: centers at fixed pitch keeps arrows measurable.
+    pitch = max(min_gap, max(h['w'] for h in heads) + 40)
+    for i, h in enumerate(heads):
+        h['cx'] = PAD + h['w'] // 2 if i == 0 else max(
+            heads[i - 1]['cx'] + pitch, PAD + h['w'] // 2)
+    by_name = {h['name']: h for h in heads}
+
+    rows = [s for s in (steps or []) if s.get('label') or (s.get('from') and s.get('to'))]
+    W = heads[-1]['cx'] + heads[-1]['w'] // 2 + PAD + 40
+    # Banner rows and lane notes must fit: measure them into the width.
+    for s in rows:
+        if s.get('from') and s.get('to'):
+            continue
+        lw = _render_text(str(s.get('label', '')), glyphs, LABEL_S)[0].size[0]
+        W = max(W, lw + PAD * 2 + 30)
+    H = TOP_H + 18 + len(rows) * STEP_H + 24
+    canvas = Image.new('RGBA', (int(W), int(H)), (0, 0, 0, 0))
+
+    # Heads + lifelines.
+    bottom = H - 12
+    for h in heads:
+        bw, bh = h['w'], 34
+        tint = actor_color.get(h['name'])
+        rect, _ = hand_rect(0, 0, bw, bh, width=2)
+        if tint:
+            rect = _tint(rect, tint)
+        canvas.alpha_composite(rect, (int(h['cx'] - bw // 2 - 6), 6 - 6))
+        head_img, _ = _render_text(h['name'], glyphs, ACTOR_S)
+        if tint:
+            head_img = _tint(head_img, tint)
+        canvas.alpha_composite(
+            head_img,
+            (int(h['cx'] - head_img.size[0] // 2), int(6 + bh // 2 - head_img.size[1] // 2)),
+        )
+        if tint:
+            _seq_arrow(canvas, (h['cx'], 6 + bh + 2), (h['cx'], bottom), width=1, rgb=tint,
+                       head=False)
+        else:
+            hand_line(canvas, (h['cx'], 6 + bh + 2), (h['cx'], bottom), width=1)
+
+    parts = [{'id': h['name'], 'x': h['cx'] - h['w'] // 2 - 6, 'y': 0,
+              'w': h['w'] + 12, 'h': 46} for h in heads]
+
+    # Steps, top to bottom. Numbered so the voice can reference them.
+    y = TOP_H + 24
+    n_step = 0
+    for s in rows:
+        alert = bool(s.get('alert'))
+        # Explicit "color" wins; "alert" is shorthand for red; otherwise a step
+        # INHERITS the acting actor's color, so a colored cast automatically
+        # yields a followable colored story without the model repeating itself.
+        inherited = actor_color.get(str(s.get('from') or s.get('actor') or ''))
+        ink = _color_of(s, ALERT if alert else inherited)
+        frm = by_name.get(str(s.get('from', '')))
+        to = by_name.get(str(s.get('to', '')))
+        lbl = str(s.get('label', ''))
+        n_step += 1
+        _centered_text(canvas, f"{n_step}.", PAD // 2 + 6, y, glyphs, 0.4)
+        if frm and to and frm is not to:
+            x1, x2 = frm['cx'], to['cx']
+            _seq_arrow(canvas, (x1, y), (x2, y), rgb=ink)
+            if lbl:
+                img, _ = _render_text(lbl, glyphs, LABEL_S)
+                if ink:
+                    img = _tint(img, ink)
+                canvas.alpha_composite(
+                    img, (int((x1 + x2) / 2 - img.size[0] / 2), int(y - img.size[1] - 3)))
+            if alert:
+                _alert_x(canvas, max(x1, x2) + 16, y, rgb=ink or ALERT)
+            parts.append({'id': f'step{n_step}',
+                          'x': min(x1, x2), 'y': y - 26, 'w': abs(x2 - x1), 'h': 34})
+        else:
+            anchor = by_name.get(str(s.get('actor', ''))) or frm or to
+            img, _ = _render_text(lbl, glyphs, LABEL_S)
+            if ink:
+                img = _tint(img, ink)
+            if anchor:
+                px = int(anchor['cx'] + 14)
+                # A note on the rightmost lane goes on the LEFT of the
+                # lifeline, so it can never run off the canvas.
+                if px + img.size[0] > W - PAD:
+                    px = int(anchor['cx'] - 14 - img.size[0])
+            else:
+                px = int(W / 2 - img.size[0] / 2)  # banner row, centered
+            canvas.alpha_composite(img, (px, int(y - img.size[1] // 2)))
+            if alert:
+                _alert_x(canvas, px - 16, y, rgb=ink or ALERT)
+            parts.append({'id': f'step{n_step}', 'x': px - 20, 'y': y - 20,
+                          'w': img.size[0] + 40, 'h': 34})
+        y += STEP_H
+
+    canvas.info['parts'] = parts
+    return canvas, int(H) // 2
+
+
+def _seq_arrow(canvas, p1, p2, width=2, rgb=None, head=True):
+    """Wobbly arrow, optionally colored. head=False draws a plain line
+    (used for tinted lifelines)."""
+    fill = (*rgb, 255) if rgb else None
+    x1, y1 = p1
+    x2, y2 = p2
+    span = max(abs(x2 - x1), abs(y2 - y1))
+    n = max(6, int(span / 24))
+    pts = [(x1 + (x2 - x1) * k / n,
+            y1 + (y2 - y1) * k / n + (random.uniform(-1.1, 1.1) if 0 < k < n else 0))
+           for k in range(n + 1)]
+    aa_line(canvas, pts, fill=fill, width=width)
+    if not head:
+        return
+    sgn = 1 if x2 >= x1 else -1
+    aa_line(canvas, [(x2 - sgn * 12, y2 - 6), (x2, y2), (x2 - sgn * 12, y2 + 6)],
+            fill=fill, width=width)
+
+
+def _tint(img, rgb):
+    """Recolor an ink raster to rgb, preserving alpha."""
+    px = img.load()
+    out = img.copy()
+    po = out.load()
+    for yy in range(img.size[1]):
+        for xx in range(img.size[0]):
+            a = px[xx, yy][3]
+            if a:
+                po[xx, yy] = (rgb[0], rgb[1], rgb[2], a)
+    return out
+
+
+def _alert_x(canvas, x, y, r=8, rgb=None):
+    """Small X marker in the step's color (red by default)."""
+    fill = (*(rgb or PALETTE['red']), 255)
+    aa_line(canvas, [(x - r, y - r), (x + r, y + r)], fill=fill, width=3)
+    aa_line(canvas, [(x - r, y + r), (x + r, y - r)], fill=fill, width=3)
+
+
+def draw_er_diagram(entities, relationships, glyphs=None, scale=0.7):
+    """Draw an Entity-Relationship diagram with FULLY AUTOMATIC layout.
+
+    Rewritten (local, keep on re-vendor): the original trusted model-supplied
+    x/y and fixed 110px boxes — real lessons produced edges slicing through
+    entities and labels wider than their shapes. Now any x/y in the spec is
+    ignored; boxes are measured from their text, entities sit on one row, and
+    each relationship gets its own routing band below, with elbow (vertical +
+    horizontal) edges that cannot cross a box.
+
+    entities: list of {'name': 'Student', 'attrs': ['student_id PK', 'name']}
+    relationships: list of {'name': 'Enrolls', 'from': 'Student',
+                            'to': 'Course', 'card': 'M:N', 'attrs': ['grade']}
+    """
+    entities = [e for e in entities if e.get('name')]
+    if not entities:
+        return Image.new('RGBA', (200, 60), (0, 0, 0, 0)), 30
+
+    NAME_S, ATTR_S = 0.6, 0.48
+    ROW_H, PAD_X, GAP_X = 19, 14, 70
+
+    # Measure each entity box from its own text.
+    boxes = []  # {name, x, y, w, h, cx}
     for e in entities:
-        x, y = e['x'], e['y']
-        name = e['name']
-        attrs = e.get('attrs', [])
-        h = 26 + len(attrs) * 16
-        w = 110
-        rect, _ = hand_rect(0, 0, w, h, width=2)
-        canvas.alpha_composite(rect, (x - 6, y - 6))
-        _centered_text(canvas, name, x + w // 2, y + 12, glyphs, scale=0.65)
-        for i, a in enumerate(attrs):
-            _centered_text(canvas, a, x + w // 2, y + 28 + i * 16, glyphs, scale=0.5)
+        name = str(e['name'])
+        attrs = [str(a) for a in e.get('attrs', [])]
+        widths = [_render_text(name, glyphs, NAME_S)[0].size[0]]
+        widths += [_render_text(a, glyphs, ATTR_S)[0].size[0] for a in attrs]
+        w = max(widths) + PAD_X * 2
+        h = 30 + (ROW_H * len(attrs) + 8 if attrs else 0)
+        boxes.append({'name': name, 'attrs': attrs, 'w': w, 'h': h,
+                      'color': _color_of(e)})
 
-    # draw relationships as diamonds
-    for r in relationships:
-        x = (r.get('x', 300))
-        y = (r.get('y', 140))
-        name = r['name']
-        w, h = 80, 40
-        diamond = [(x, y - h // 2), (x + w // 2, y), (x, y + h // 2), (x - w // 2, y), (x, y - h // 2)]
-        aa_line(canvas, diamond, width=2)
-        _centered_text(canvas, name, x, y, glyphs, scale=0.55)
-        _centered_text(canvas, r.get('card', ''), x, y + h // 2 + 12, glyphs, scale=0.5)
+    # One row of entities, measured gaps; tops aligned.
+    x = 16
+    top = 12
+    for b in boxes:
+        b['x'] = x
+        b['y'] = top
+        b['cx'] = x + b['w'] // 2
+        x += b['w'] + GAP_X
+    row_bottom = top + max(b['h'] for b in boxes)
+    by_name = {b['name']: b for b in boxes}
 
-        # connect to entities
-        for e in entities:
-            if e['name'] == r['from']:
-                hand_line(canvas, (e['x'] + 110, e['y'] + 26), (x - w // 2, y), width=2)
-            if e['name'] == r['to']:
-                hand_line(canvas, (e['x'], e['y'] + 26), (x + w // 2, y), width=2)
+    # Each relationship routes in its own horizontal band below the row, so
+    # no two relationship runs can collide and no edge enters a box.
+    BAND_GAP, BAND_H = 46, 64
+    rels = []
+    drops = {b['name']: 0 for b in boxes}  # per-entity drop count → fan out
+    for i, r in enumerate([r for r in relationships or [] if r.get('name')]):
+        a = by_name.get(str(r.get('from', '')))
+        b = by_name.get(str(r.get('to', '')))
+        if a is None or b is None or a is b:
+            continue
+        name = str(r['name'])
+        nw = _render_text(name, glyphs, 0.52)[0].size[0]
+        dw = max(84, nw + 34)
+        band_y = row_bottom + BAND_GAP + len(rels) * BAND_H
+        ax = a['cx'] + (drops[a['name']] - 1) * 14
+        bx = b['cx'] + (drops[b['name']] - 1) * 14
+        drops[a['name']] += 1
+        drops[b['name']] += 1
+        rels.append({
+            'name': name, 'a': a, 'b': b, 'ax': ax, 'bx': bx,
+            'dx': (ax + bx) // 2, 'dy': band_y, 'dw': dw, 'dh': 40,
+            'card': str(r.get('card', '') or ''),
+            'attrs': [str(t) for t in r.get('attrs', [])],
+            'color': _color_of(r),
+        })
 
-    return canvas, H // 2
+    W = max(x - GAP_X + 16, 240)
+    H = (rels[-1]['dy'] + 70 if rels else row_bottom + 20)
+    canvas = Image.new('RGBA', (int(W), int(H)), (0, 0, 0, 0))
+
+    # Named part boxes so the board can point AT a piece of this diagram
+    # (mark target "erd#Doctor"). Layout is ours, so these are exact.
+    canvas.info['parts'] = (
+        [{'id': b['name'], 'x': b['x'] - 6, 'y': b['y'] - 6,
+          'w': b['w'] + 12, 'h': b['h'] + 12} for b in boxes]
+        + [{'id': r['name'], 'x': r['dx'] - r['dw'] // 2, 'y': r['dy'] - r['dh'] // 2,
+            'w': r['dw'], 'h': r['dh']} for r in rels]
+    )
+
+    # Entities: name row, separator, attribute rows (attribute text lives
+    # INSIDE the box — measured above, so it always fits).
+    for b in boxes:
+        rect, _ = hand_rect(0, 0, b['w'], b['h'], width=2)
+        if b['color']:
+            rect = _tint(rect, b['color'])
+        canvas.alpha_composite(rect, (int(b['x'] - 6), int(b['y'] - 6)))
+        name_img, _ = _render_text(b['name'], glyphs, NAME_S)
+        if b['color']:
+            name_img = _tint(name_img, b['color'])
+        canvas.alpha_composite(
+            name_img,
+            (int(b['cx'] - name_img.size[0] // 2), int(b['y'] + 14 - name_img.size[1] // 2)),
+        )
+        if b['attrs']:
+            hand_line(canvas, (b['x'], b['y'] + 27), (b['x'] + b['w'], b['y'] + 27), width=1)
+            for i, a in enumerate(b['attrs']):
+                _centered_text(canvas, a, b['cx'], b['y'] + 38 + i * ROW_H, glyphs, ATTR_S)
+
+    # Relationships: elbow edges down into the band, diamond at the middle.
+    for r in rels:
+        fill = (*r['color'], 255) if r['color'] else None
+        left_tip = (r['dx'] - r['dw'] // 2, r['dy'])
+        right_tip = (r['dx'] + r['dw'] // 2, r['dy'])
+        for (ex, box, tip) in ((r['ax'], r['a'], left_tip), (r['bx'], r['b'], right_tip)):
+            start = (ex, box['y'] + box['h'] + 2)
+            if fill:
+                _seq_arrow(canvas, start, (ex, r['dy']), width=2, rgb=r['color'], head=False)
+                _seq_arrow(canvas, (ex, r['dy']), tip, width=2, rgb=r['color'], head=False)
+            else:
+                hand_line(canvas, start, (ex, r['dy']), width=2)
+                hand_line(canvas, (ex, r['dy']), tip, width=2)
+        d = [(r['dx'], r['dy'] - r['dh'] // 2), right_tip,
+             (r['dx'], r['dy'] + r['dh'] // 2), left_tip,
+             (r['dx'], r['dy'] - r['dh'] // 2)]
+        aa_line(canvas, d, fill=fill, width=2)
+        rel_img, _ = _render_text(r['name'], glyphs, 0.52)
+        if r['color']:
+            rel_img = _tint(rel_img, r['color'])
+        canvas.alpha_composite(
+            rel_img,
+            (int(r['dx'] - rel_img.size[0] // 2), int(r['dy'] - rel_img.size[1] // 2)),
+        )
+        if r['card']:
+            _centered_text(canvas, r['card'], r['dx'], r['dy'] + r['dh'] // 2 + 12, glyphs, 0.46)
+        for i, t in enumerate(r['attrs']):
+            _centered_text(canvas, '(' + t + ')', r['dx'] + r['dw'] // 2 + 30 + i * 60,
+                           r['dy'] + r['dh'] // 2 + 12, glyphs, 0.46)
+
+    return canvas, int(H) // 2
 
 
 def draw_relational_schema(tables, relationships=None, glyphs=None, scale=0.7):

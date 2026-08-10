@@ -24,10 +24,52 @@ const architectureSelectionSchema = z.object({
   cueSegmentId: z.string().optional().describe("Exact supplied segment id"),
 });
 
-export const VISUAL_DIRECTOR_SYSTEM_PROMPT = `You are the visual director for a live lesson. Call draw_architecture exactly once.
-Use only exact board element IDs, relationship pairs, and segment IDs from the supplied JSON.
-Choose the smallest diagram that makes the supplied flow clear.
-Do not add labels, facts, equations, or relationships. Do not answer with text.`;
+// The director exists to make the student SEE the lesson, not to restate it:
+// a lesson describing events over time (transactions, protocols, two users on
+// one document) becomes a sequence diagram — actors and numbered arrows with
+// the failure step in red — drawn by the engine's auto-layout.
+const diagramColorSchema = z
+  .enum(["red", "green", "amber", "violet"])
+  .describe(
+    "Meaning-bearing color: red = failure/violation, green = correct/committed, amber = warning/waiting/stale, violet = a second actor or alternative path. Omit for ordinary ink.",
+  );
+
+const sequenceStorySchema = z.object({
+  id: z.string().describe("A short diagram id"),
+  actors: z
+    .array(
+      z.union([
+        z.string().min(1).max(40),
+        z.object({ name: z.string().min(1).max(40), color: diagramColorSchema.optional() }),
+      ]),
+    )
+    .min(2)
+    .max(4)
+    .describe(
+      "The players in the story, e.g. [{\"name\":\"Alice\",\"color\":\"green\"}, \"Doc (shared)\", {\"name\":\"Bob\",\"color\":\"violet\"}]. Give each human/process actor its own color so the student can follow one lane at a glance.",
+    ),
+  steps: z
+    .array(
+      z.object({
+        from: z.string().optional().describe("Acting actor (arrow start)"),
+        to: z.string().optional().describe("Receiving actor (arrow end)"),
+        actor: z.string().optional().describe("For a note pinned to one actor's lane"),
+        label: z.string().min(1).max(90).describe("What happens, condensed from the lesson"),
+        color: diagramColorSchema.optional(),
+        alert: z.boolean().optional().describe("true = the failure/anomaly moment, drawn red with an X"),
+      }),
+    )
+    .min(2)
+    .max(8)
+    .describe("The story in order, top to bottom"),
+  cueSegmentId: z.string().optional().describe("Exact supplied segment id this illustrates"),
+});
+
+export const VISUAL_DIRECTOR_SYSTEM_PROMPT = `You are the visual director for a live lesson. Make exactly one tool call.
+If the lesson tells a story over time — actors doing things in order (transactions, users editing a document, requests between machines, a race or deadlock) — call draw_sequence and condense that story into steps, marking the failure moment with alert:true.
+USE COLOR TO CARRY MEANING, never for decoration: give each actor its own color so a lane is followable at a glance, and color the steps — green for the correct/committed action, amber for stale or waiting, red for the violation, violet for the second actor's path. A diagram in one flat color makes the student hunt for what matters.
+Otherwise call draw_architecture, using only exact board element IDs, relationship pairs, and segment IDs from the supplied JSON.
+Step labels must condense sentences from the supplied segments — never invent facts, numbers, or names. Do not answer with text.`;
 
 export type VisualPlanIssueCode =
   | "invalid_plan"
@@ -220,6 +262,16 @@ export function validateVisualPlan(
         return valid;
       });
       action = { ...action, edges };
+    } else if (action.action === "draw_diagram") {
+      // The engine auto-lays these out; here we only bound the payload.
+      if (JSON.stringify(action.spec).length > 4000) {
+        issues.push({
+          code: "invalid_plan",
+          actionId: action.id,
+          message: "Dropped oversized diagram spec.",
+        });
+        continue;
+      }
     } else if (action.action === "arrange_layout") {
       const targets = uniqueKnownTargets(action.targets, knownElements);
       if (targets.length === 0) {
@@ -403,21 +455,72 @@ async function defaultGenerate(request: {
   const result = await generateText({
     model: request.model,
     tools: {
+      draw_sequence: tool({
+        description:
+          "Draw the lesson's story as a sequence diagram: actors as lanes, each step a numbered arrow, the failure step red. Use for anything happening over time between actors.",
+        inputSchema: sequenceStorySchema,
+      }),
       draw_architecture: tool({
         description:
           "Select supplied board elements and relationships for one architecture, concept, or process diagram.",
         inputSchema: architectureSelectionSchema,
       }),
     },
-    toolChoice: { type: "tool", toolName: "draw_architecture" },
+    toolChoice: "required",
     system: request.system,
     prompt: JSON.stringify(request.input),
     providerOptions: { ollama: { reasoningEffort: "low" } },
     abortSignal: request.abortSignal,
     maxRetries: 0,
   });
+
+  const sequenceCall = result.toolCalls.find((candidate) => candidate.toolName === "draw_sequence");
+  if (sequenceCall) {
+    const story = sequenceStorySchema.parse(sequenceCall.input);
+    // Actors arrive as bare names or {name, color}; normalize, dedupe by name.
+    const actorList: { name: string; color?: string }[] = [];
+    for (const raw of story.actors) {
+      const entry = typeof raw === "string" ? { name: raw.trim() } : { name: raw.name.trim(), color: raw.color };
+      if (!entry.name || actorList.some((a) => a.name === entry.name)) continue;
+      actorList.push(entry);
+    }
+    const actorNames = actorList.map((a) => a.name);
+    const actors = actorList.map((a) => (a.color ? { name: a.name, color: a.color } : a.name));
+    // Steps may only reference declared actors; a bad reference degrades to a
+    // banner row instead of killing the diagram.
+    const steps = story.steps.map((step) => ({
+      ...(step.from && actorNames.includes(step.from) ? { from: step.from } : {}),
+      ...(step.to && actorNames.includes(step.to) ? { to: step.to } : {}),
+      ...(step.actor && actorNames.includes(step.actor) ? { actor: step.actor } : {}),
+      label: clamp(step.label, 90),
+      ...(step.color ? { color: step.color } : {}),
+      ...(step.alert ? { alert: true } : {}),
+    }));
+    if (actors.length >= 2 && steps.length >= 2) {
+      const cue = request.input.segments.some((segment) => segment.id === story.cueSegmentId)
+        ? { segmentId: story.cueSegmentId!, timing: "during" as const }
+        : request.input.segments[0]
+          ? { segmentId: request.input.segments[0].id, timing: "during" as const }
+          : undefined;
+      const rawId = `story-${story.id.replace(/[^A-Za-z0-9._:-]+/g, "-") || "lesson"}`.slice(0, 80);
+      const action: Extract<VisualAction, { action: "draw_diagram" }> = {
+        action: "draw_diagram",
+        id: /^[A-Za-z]/.test(rawId) ? rawId : `story-${safeIdPart(rawId)}`,
+        title: clamp(request.input.objective, 120),
+        spec: { type: "sequence", actors, steps },
+        ...(cue ? { cue } : {}),
+      };
+      return visualPlanSchema.parse({
+        version: 1,
+        sceneId: `${action.id}-scene`,
+        summary: action.title ?? `Visual story of ${request.input.topic}`.slice(0, 240),
+        actions: [action],
+      });
+    }
+  }
+
   const call = result.toolCalls.find((candidate) => candidate.toolName === "draw_architecture");
-  if (!call) throw new Error("The visual model did not call draw_architecture.");
+  if (!call) throw new Error("The visual model called neither draw_sequence (validly) nor draw_architecture.");
   const selection = architectureSelectionSchema.parse(call.input);
   const byId = new Map(request.input.boardElements.map((element) => [element.id, element]));
   const selectedIds = [...new Set(selection.nodeIds)].filter((id) => byId.has(id)).slice(0, 10);

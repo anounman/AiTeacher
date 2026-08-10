@@ -9,9 +9,26 @@ export const VISUAL_ACTION_NAMES = [
   "write_label",
   "draw_arrow",
   "draw_architecture",
+  "draw_diagram",
   "arrange_layout",
   "group_elements",
   "emphasize",
+] as const;
+
+// Auto-layout diagram types the mathwriter engine renders deterministically
+// ([G]{...} markup). The director emits these instead of authoring geometry:
+// layout, sizing, and routing are the engine's job and cannot overlap.
+export const G_DIAGRAM_TYPES = [
+  "sequence",
+  "er_diagram",
+  "tree",
+  "array",
+  "graph",
+  "linked_list",
+  "stack",
+  "queue",
+  "dp_table",
+  "memory",
 ] as const;
 
 export type VisualActionName = (typeof VISUAL_ACTION_NAMES)[number];
@@ -138,6 +155,21 @@ export const drawArchitectureActionSchema = z
   })
   .strict();
 
+// A whole diagram delegated to the handwriting engine's auto-layout: the
+// director says WHAT to show (actors, steps, entities…), the engine decides
+// WHERE every stroke goes. Renders as real handwriting via [G] markup.
+export const drawDiagramActionSchema = z
+  .object({
+    action: z.literal("draw_diagram"),
+    id: elementIdSchema,
+    title: z.string().min(1).max(120).optional(),
+    // Size is enforced in validateVisualPlan (a refine here would break the
+    // discriminated union).
+    spec: z.object({ type: z.enum(G_DIAGRAM_TYPES) }).passthrough(),
+    ...cueField,
+  })
+  .strict();
+
 export const arrangeLayoutActionSchema = z
   .object({
     action: z.literal("arrange_layout"),
@@ -179,6 +211,7 @@ export const visualActionSchema = z.discriminatedUnion("action", [
   writeLabelActionSchema,
   drawArrowActionSchema,
   drawArchitectureActionSchema,
+  drawDiagramActionSchema,
   arrangeLayoutActionSchema,
   groupElementsActionSchema,
   emphasizeActionSchema,
@@ -267,6 +300,7 @@ export const visualFunctionInputSchemas = {
   write_label: writeLabelActionSchema.omit({ action: true }),
   draw_arrow: drawArrowActionSchema.omit({ action: true }),
   draw_architecture: drawArchitectureActionSchema.omit({ action: true }),
+  draw_diagram: drawDiagramActionSchema.omit({ action: true }),
   arrange_layout: arrangeLayoutActionSchema.omit({ action: true }),
   group_elements: groupElementsActionSchema.omit({ action: true }),
   emphasize: emphasizeActionSchema.omit({ action: true }),

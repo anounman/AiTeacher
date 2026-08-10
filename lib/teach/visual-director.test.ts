@@ -39,6 +39,7 @@ test("visual action names are a stable function-calling contract", () => {
     "write_label",
     "draw_arrow",
     "draw_architecture",
+    "draw_diagram",
     "arrange_layout",
     "group_elements",
     "emphasize",
@@ -161,4 +162,41 @@ test("planner degrades to the deterministic plan when structured generation fail
   assert.equal(result.source, "fallback");
   assert.ok(result.plan.actions.length > 0);
   assert.equal(result.issues[0]?.code, "generation_failed");
+});
+
+test("a draw_diagram sequence action survives validation and stays engine-bound", () => {
+  const input: VisualPlanningInput = {
+    topic: "Dirty reads",
+    segments: [{ id: "segment-1", text: "T1 writes X, T2 reads it, T1 aborts.", boardElementIds: [] }],
+    boardElements: [{ id: "w1", label: "Dirty Read", kind: "text" }],
+    relationships: [],
+    assetCatalog: [],
+  };
+  const { plan, issues } = validateVisualPlan(
+    {
+      version: 1,
+      sceneId: "story-dirty-read-scene",
+      actions: [
+        {
+          action: "draw_diagram",
+          id: "story-dirty-read",
+          spec: {
+            type: "sequence",
+            actors: ["T1", "X", "T2"],
+            steps: [
+              { from: "T1", to: "X", label: "write X=100" },
+              { from: "X", to: "T2", label: "read X" },
+              { label: "DIRTY READ", alert: true },
+            ],
+          },
+          cue: { segmentId: "segment-1", timing: "during" },
+        },
+      ],
+    },
+    input,
+  );
+  assert.ok(plan);
+  assert.equal(plan!.actions.length, 1);
+  assert.equal(plan!.actions[0]!.action, "draw_diagram");
+  assert.equal(issues.length, 0);
 });

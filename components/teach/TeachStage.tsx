@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Board, type BoardEntry } from "./Board";
 import { loadEngine } from "@/lib/teach/handwriting";
 import { prefetchStrokeText } from "./StrokeText";
-import { prefetchWrite } from "./HandWrite";
+import { prefetchWrite, writeReady } from "./HandWrite";
 import { loadMathJax } from "./MathWriteOn";
+import { findTarget as findMarkTarget } from "./MathMark";
 import { waitForDone } from "@/lib/teach/completion";
 import { performer, type PerformerStatus } from "@/lib/teach/performer";
 import { describeHits, queryRegion } from "@/lib/teach/spatial";
@@ -280,6 +281,10 @@ export function TeachStage({
   const onBoardGrow = useCallback(
     (el: HTMLElement) => {
       growObserverRef.current?.disconnect();
+      // A mark aims the camera at what it POINTS AT (handled where the cue is
+      // launched), never at its own near-empty label host — otherwise
+      // "let me point at the diagram" panned to a blank spot below it.
+      if (el.classList.contains("board-item-mark")) return;
       const aim = () => {
         const rect = measureEl(el);
         if (rect.w > 2 || rect.h > 2) focusBoard(rect);
@@ -293,6 +298,8 @@ export function TeachStage({
   );
   useEffect(() => () => growObserverRef.current?.disconnect(), []);
   const ink = useInk(pointToWorld);
+  const inkStrokesRef = useRef(ink.strokes);
+  inkStrokesRef.current = ink.strokes;
   const [checkingInk, setCheckingInk] = useState(false);
   // No warm-up needed: the `read` slot is a cloud vision model, always
   // resident — reads return in a couple of seconds from the first stroke.
@@ -713,6 +720,35 @@ export function TeachStage({
         }
         performer.begin(myKey, eventsRef.current.length, cursor);
 
+        // Ink-aware placement: flow items know nothing about the student's
+        // absolutely-positioned pen strokes, so a reply used to write straight
+        // over them (the check-my-work pileup). Measure both and open exactly
+        // enough vertical clearance for the new writing to start below the ink.
+        if (cursor === 0 && !anchor && inkStrokesRef.current.length) {
+          const world = worldRef.current;
+          const wRect = world?.getBoundingClientRect();
+          if (world && wRect) {
+            const k = world.offsetWidth ? wRect.width / world.offsetWidth : 1;
+            let contentBottom = 0;
+            world.querySelectorAll<HTMLElement>(".board-section .board-item").forEach((el) => {
+              contentBottom = Math.max(contentBottom, (el.getBoundingClientRect().bottom - wRect.top) / k);
+            });
+            let inkBottom = 0;
+            for (const stroke of inkStrokesRef.current) {
+              for (const p of stroke.points) inkBottom = Math.max(inkBottom, p.y);
+            }
+            const clearance = Math.ceil(inkBottom - contentBottom + 28);
+            if (inkBottom > contentBottom - 10 && clearance > 0) {
+              const key = `l-${myKey}-ink-spacer`;
+              setLiveEntries((entries) =>
+                entries.some((entry) => entry.key === key)
+                  ? entries
+                  : [...entries, { action: { type: "spacer", h: clearance }, key, live: false }],
+              );
+            }
+          }
+        }
+
         const superseded = () => liveKeyRef.current !== myKey;
         const waitUnpaused = async () => {
           while (performer.paused() && !superseded()) await new Promise((r) => setTimeout(r, 150));
@@ -742,12 +778,40 @@ export function TeachStage({
               if (entries.some((entry) => entry.key === key)) return entries;
               return [...entries, { action, key, live: true, anchor }];
             });
+            // Pointing at earlier work: bring the camera to the thing being
+            // marked (it can be far above the newest writing) as soon as the
+            // target resolves, so the student sees the circle being drawn.
+            if (action.type === "mark") {
+              void (async () => {
+                for (let i = 0; i < 20 && !superseded(); i++) {
+                  const found = findMarkTarget(action.target, key);
+                  if (found) {
+                    focusBoard(measureEl(found.el as HTMLElement));
+                    return;
+                  }
+                  await new Promise((r) => setTimeout(r, 150));
+                }
+              })();
+            }
             if (AWAITED.has(action.type)) {
               completions.push(waitForDone(key, actionTimeoutMs(action)));
             }
           };
 
           const speechTask = (async () => {
+            // Pen/voice sync gate: hold the first word until the handwriting
+            // this beat narrates is rendered and cached (bounded — a slow or
+            // failed render must never mute the teacher). Without this the
+            // voice described strokes that appeared a sentence later.
+            const beatWrites = beat.draws
+              .map((cue) => cue.event.action)
+              .filter((a): a is Extract<TeachAction, { type: "write" }> => a.type === "write");
+            if (beatWrites.length) {
+              await Promise.race([
+                Promise.all(beatWrites.map((a) => writeReady(a.markup, a.color ?? "ink"))),
+                new Promise((r) => setTimeout(r, 3000)),
+              ]);
+            }
             for (const cue of beat.speech) {
               performer.activate(myKey, cue.eventIndex);
               let doneOk = false;

@@ -591,6 +591,38 @@ def _shape_boxes(commands):
     return boxes
 
 
+def _grow_shape(commands, target_box, needed_w):
+    """Widen the CIRCLE/ELLIPSE/RECT whose bounds equal target_box so a label
+    of needed_w fits inside it. Center stays put; only width grows."""
+    for c in commands:
+        cmd, args = c['cmd'], c['args']
+        try:
+            if cmd == 'ELLIPSE':
+                cx, cy = _parse_coords(args[0])
+                rx, ry = _parse_coords(args[1])
+                if abs((cx - rx) - target_box[0]) < 1 and abs((cx + rx) - target_box[2]) < 1:
+                    c['args'][1] = '%g,%g' % (needed_w / 2, ry)
+                    return
+            elif cmd == 'CIRCLE':
+                cx, cy = _parse_coords(args[0])
+                r = _parse_float(args[1])
+                if abs((cx - r) - target_box[0]) < 1 and abs((cx + r) - target_box[2]) < 1:
+                    # A circle grown only in width is an ellipse.
+                    c['cmd'] = 'ELLIPSE'
+                    c['args'] = [args[0], '%g,%g' % (needed_w / 2, r)]
+                    return
+            elif cmd == 'RECT':
+                x, y = _parse_coords(args[0])
+                w, h = _parse_coords(args[1])
+                if abs(x - target_box[0]) < 1 and abs((x + w) - target_box[2]) < 1:
+                    grow = needed_w - w
+                    c['args'][0] = '%g,%g' % (x - grow / 2, y)
+                    c['args'][1] = '%g,%g' % (needed_w, h)
+                    return
+        except (IndexError, ValueError):
+            continue
+
+
 def _boxes_overlap(a, b, pad=2):
     return (a[0] + pad < b[2] and b[0] + pad < a[2]
             and a[1] + pad < b[3] and b[1] + pad < a[3])
@@ -617,7 +649,31 @@ def repair_draw_layout(commands, scale=0.7, glyphs=None):
             continue
         cx = (box[0] + box[2]) / 2
         cy = (box[1] + box[3]) / 2
-        inside = any(s[0] <= cx <= s[2] and s[1] <= cy <= s[3] for s in shapes)
+        container = None
+        for s in shapes:
+            if s[0] <= cx <= s[2] and s[1] <= cy <= s[3]:
+                if container is None or (s[2] - s[0]) * (s[3] - s[1]) < (container[2] - container[0]) * (container[3] - container[1]):
+                    container = s
+        inside = container is not None
+        if inside:
+            # A shape's label is trusted where it is — but it must FIT the
+            # shape. ER attribute ellipses routinely get labels wider than
+            # themselves ("date-of-birth" in a 76px ellipse), so the outline
+            # strikes through the text. Shrink the label's scale to fit,
+            # floored at 0.42 for legibility; if the floor still doesn't fit,
+            # GROW the shape instead — an outline is elastic, text is not.
+            shape_w = container[2] - container[0]
+            text_w = box[2] - box[0]
+            if text_w > shape_w * 1.1 and shape_w > 8:
+                cur_s = _parse_float(c['kwargs'].get('scale'), scale)
+                new_s = max(0.42, cur_s * (shape_w * 1.02) / text_w)
+                if new_s < cur_s:
+                    c['kwargs']['scale'] = '%g' % new_s
+                    half = (box[2] - box[0]) * (new_s / cur_s) / 2
+                    box = (cx - half, box[1], cx + half, box[3])
+                needed = (box[2] - box[0]) * 1.12
+                if needed > shape_w:
+                    _grow_shape(commands, container, needed)
         if not inside:
             dy = 0.0
             for _guard in range(12):

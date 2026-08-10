@@ -61,6 +61,13 @@ def aa_line(target_img, pts, fill, width=3, joint='curve'):
     nothing looks pixelated."""
     if not pts or len(pts) < 2:
         return
+    # Local patch (keep on re-vendor): an SVG canvas takes the polyline
+    # directly — these points are already vector geometry, so supersampling
+    # and downsampling them into pixels is pure loss.
+    stroke = getattr(target_img, 'stroke', None)
+    if stroke is not None:
+        stroke(pts, fill, width)
+        return
     fpts = [(float(p[0]), float(p[1])) for p in pts]
     min_x = min(p[0] for p in fpts)
     min_y = min(p[1] for p in fpts)
@@ -100,7 +107,17 @@ def recolor_to_blue(img):
     return Image.fromarray(out8, 'RGBA')
 
 
+_GLYPH_CACHE = None
+
+
 def load_glyphs():
+    # Local patch (keep on re-vendor): memoized. This decodes 748 PNGs and runs
+    # a numpy pass + cv2 blur on each; it was being called on EVERY /render
+    # (server.py, and twice more inside this module), costing a measured 44 ms
+    # of every single render — about 60% of total render time.
+    global _GLYPH_CACHE
+    if _GLYPH_CACHE is not None:
+        return _GLYPH_CACHE
     with open('glyphs/metadata.json', 'r') as f:
         meta = json.load(f)
     cache = {}
@@ -111,6 +128,7 @@ def load_glyphs():
             img = recolor_to_blue(img)
             v2 = {**v, 'img': img, 'baseline_y': v['baseline_y'] - 48}
             cache[ch].append(v2)
+    _GLYPH_CACHE = cache
     return cache
 
 
@@ -1157,7 +1175,7 @@ def render_diagram(spec, glyphs, scale=0.75):
     )
     from diagrams_extra import (
         draw_logic_gate, draw_logic_circuit,
-        draw_er_diagram, draw_relational_schema, draw_sql_join_venn,
+        draw_er_diagram, draw_sequence, draw_relational_schema, draw_sql_join_venn,
         draw_mapreduce, draw_cap_theorem, draw_database_sharding,
         draw_consistent_hashing, draw_hdfs_architecture,
         draw_kafka_pipeline, draw_spark_lineage,
@@ -1303,6 +1321,13 @@ def render_diagram(spec, glyphs, scale=0.75):
             glyphs=glyphs,
             scale=scale,
         )
+    if dtype == 'sequence':
+        return draw_sequence(
+            spec.get('actors', []),
+            spec.get('steps', []),
+            glyphs=glyphs,
+            scale=scale,
+        )
     if dtype == 'relational_schema':
         return draw_relational_schema(
             spec.get('tables', []),
@@ -1421,8 +1446,14 @@ def render_pages(text, *,
                  line_height_jitter=3,
                  elastic_magnitude=0,
                  shear_max=0,
-                 alpha_jitter=0):
-    glyphs = load_glyphs()
+                 alpha_jitter=0,
+                 # Local patch (keep on re-vendor): pluggable glyph set and
+                 # canvas so the same layout can emit SVG instead of pixels.
+                 # See svg_canvas.py — the layout math is already vector; only
+                 # the backend was raster.
+                 glyphs=None,
+                 canvas_factory=None):
+    glyphs = glyphs if glyphs is not None else load_glyphs()
     W, H = page_size
     max_x = W - margin_right_min
     max_y = H - margin_bottom
@@ -1437,7 +1468,8 @@ def render_pages(text, *,
              'line_y': 0, 'line_x_start': 0, 'line_slope': 0.0}
 
     def new_page():
-        state['canvas'] = Image.new('RGBA', page_size, (0, 0, 0, 0))
+        state['canvas'] = (canvas_factory(page_size) if canvas_factory
+                           else Image.new('RGBA', page_size, (0, 0, 0, 0)))
         state['line_y'] = margin_top + random.randint(-6, 12)
         state['line_x_start'] = margin_left + random.randint(-line_start_jitter, line_start_jitter)
         state['line_slope'] = random.uniform(-line_slope_jitter, line_slope_jitter)
@@ -1445,6 +1477,11 @@ def render_pages(text, *,
         state['y'] = state['line_y']
 
     def finish_page():
+        if canvas_factory:
+            # A vector page needs no paper composite or scan pass — the board
+            # supplies its own paper and the SVG is already clean.
+            pages.append(state['canvas'])
+            return
         paper = make_grid_paper(size=page_size)
         combined = Image.alpha_composite(paper, state['canvas'])
         pages.append(apply_scan_effects(combined))
@@ -1524,6 +1561,7 @@ def render_pages(text, *,
             header_underline = True
         header_start_x = None
         header_baseline_y = None
+        header_first_baseline = None
 
         tokens = tokenize(para)
 
@@ -1590,11 +1628,20 @@ def render_pages(text, *,
                                 gap = math.hypot(p_entry[0] - p_exit[0],
                                                  p_entry[1] - p_exit[1])
                                 if 3 < gap < 14:
+                                    # Local patch (keep on re-vendor): the join
+                                    # stroke must scale with the writing. A
+                                    # fixed width 3 was only tolerable because
+                                    # LANCZOS downsampling softened it; drawn
+                                    # as a real vector path at scale 0.72 it
+                                    # reads as a line struck through the word.
                                     draw_connector(state['canvas'], p_exit, p_entry,
-                                                   baseline, width=3)
+                                                   baseline,
+                                                   width=max(1, int(round(2.2 * s))))
                         state['canvas'].alpha_composite(gimg, (state['x'], py))
                         if header_underline:
                             header_baseline_y = baseline
+                            if header_first_baseline is None:
+                                header_first_baseline = baseline
                         # Compute exit point for next iteration
                         exit_pt = find_pen_point(gimg, bl, side='right')
                         if exit_pt is not None:
@@ -1693,15 +1740,20 @@ def render_pages(text, *,
                 state['line_y'] = py + bh - line_height + 8
                 new_line()
 
-        # Header underline
+        # Header underline. Local patch (keep on re-vendor): follow the line's
+        # slope — a flat underline at the LAST glyph's baseline cut straight
+        # through the text of long sloped titles.
         if header_underline and header_start_x is not None and header_baseline_y is not None:
             ux1 = header_start_x - 4
             ux2 = state['x'] - space_width + 4
-            uy = header_baseline_y + 6 + random.randint(-1, 2)
+            uy1 = (header_first_baseline
+                   if header_first_baseline is not None else header_baseline_y) + 7
+            uy2 = header_baseline_y + 7
+            jit = random.randint(-1, 2)
             mid = (ux1 + ux2) // 2
-            pts = [(ux1, uy + random.uniform(-1, 1)),
-                   (mid, uy + random.uniform(-1, 1)),
-                   (ux2, uy + random.uniform(-1, 1))]
+            pts = [(ux1, uy1 + jit + random.uniform(-1, 1)),
+                   (mid, (uy1 + uy2) / 2 + jit + random.uniform(-1, 1)),
+                   (ux2, uy2 + jit + random.uniform(-1, 1))]
             aa_line(state['canvas'], pts, _ink_jit(), width=3)
 
         new_line()

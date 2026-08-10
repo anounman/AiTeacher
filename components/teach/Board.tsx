@@ -51,8 +51,10 @@ export function Board({
       if (e.action.type !== "visual_scene") return false;
       const labels = e.action.plan.actions
         .filter((a): a is Extract<typeof a, { action: "draw_architecture" }> => a.action === "draw_architecture")
+        // Math-heavy labels ("= 4 + 5h + h²") normalize to very short strings
+        // — an 8-char floor let a pure-equation echo scene slip through.
         .flatMap((a) => a.nodes.map((n) => norm(n.label)))
-        .filter((l) => l.length > 8);
+        .filter((l) => l.length >= 4);
       if (!labels.length) return false;
       const echoed = labels.filter((l) => written.some((w) => w.startsWith(l) || l.startsWith(w.slice(0, 40)))).length;
       return echoed >= Math.ceil(labels.length / 2);
@@ -178,6 +180,8 @@ function BoardItem({ entry }: { entry: BoardEntry }) {
       );
     case "visual_scene":
       return <VisualScene plan={action.plan} instant={!live} />;
+    case "spacer":
+      return <div style={{ height: action.h }} aria-hidden />;
     default:
       return null;
   }

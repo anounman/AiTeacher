@@ -48,6 +48,10 @@ export const teachActionSchema = z.discriminatedUnion("type", [
   // lessons or the model contract.
   z.object({ type: z.literal("visual_scene"), plan: visualPlanSchema }),
   z.object({ type: z.literal("new_page") }),
+  // Client-only vertical clearance (never emitted by the model): pushes new
+  // writing below regions the student has already inked so a reply can't
+  // land on top of their pen work.
+  z.object({ type: z.literal("spacer"), h: z.number() }),
 ]);
 
 export type TeachAction = z.infer<typeof teachActionSchema>;
@@ -150,4 +154,51 @@ export function speakable(text: string): string {
     .replace(/[#*_`>|]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+// A compact inventory of what is CURRENTLY on the whiteboard, for the system
+// prompt. Without it a follow-up question ("explain that again") reached the
+// model with no idea which ids exist, so it invented one — and a stale id
+// resolved to an older lesson's diagram, drawing every circle on the wrong
+// picture. Ids here are exactly what a mark action must target.
+export function boardInventory(lessonMd: string, max = 30): string {
+  const lines: string[] = [];
+  for (const event of parseTeachEvents(lessonMd, true)) {
+    if (event.kind !== "draw") continue;
+    const a = event.action;
+    if (a.type === "write") {
+      const id = a.id;
+      if (!id) continue;
+      const g = /\[G\]\s*(\{[\s\S]*\})\s*\[\/G\]/.exec(a.markup);
+      if (g) {
+        let detail = "diagram";
+        try {
+          const spec = JSON.parse(g[1]!) as {
+            type?: string;
+            entities?: { name?: string }[];
+            relationships?: { name?: string }[];
+          };
+          const names = [...(spec.entities ?? []), ...(spec.relationships ?? [])]
+            .map((n) => n?.name)
+            .filter((n): n is string => !!n);
+          detail = `${spec.type ?? "diagram"}${names.length ? ` — parts: ${names.join(", ")}` : ""}`;
+        } catch {
+          /* unparsable spec: still worth listing the id */
+        }
+        lines.push(`- ${id} (${detail})`);
+        continue;
+      }
+      const text = a.markup
+        .replace(/\[DRAW\][\s\S]*?\[\/DRAW\]/g, "hand-drawn figure")
+        .replace(/~~/g, "")
+        .replace(/\[\/?[A-Z]\]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 70);
+      lines.push(`- ${id} ("${text}")`);
+    } else if (a.type === "code" && a.id) {
+      lines.push(`- ${a.id} (code, mark lines as ${a.id}:L0, ${a.id}:L1, …)`);
+    }
+  }
+  return lines.slice(-max).join("\n");
 }

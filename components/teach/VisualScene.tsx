@@ -178,6 +178,27 @@ export function VisualScene({ plan, instant = false }: { plan: VisualPlan; insta
   const architectures = plan.actions.filter(
     (action): action is ArchitectureAction => action.action === "draw_architecture",
   );
+  // Engine-rendered diagrams (sequence stories etc.): straight to handwriting
+  // via [G] markup — the auto-layout owns geometry, no card chrome ever.
+  const diagrams = plan.actions.filter(
+    (action): action is Extract<VisualAction, { action: "draw_diagram" }> =>
+      action.action === "draw_diagram",
+  );
+  if (diagrams.length) {
+    return (
+      <div data-scene-id={plan.sceneId} aria-label={plan.summary ?? "Visual explanation"}>
+        {diagrams.map((action) => (
+          <HandWrite
+            key={action.id}
+            writeId={action.id}
+            itemKey={action.id}
+            markup={`[G]${JSON.stringify(action.spec)}[/G]`}
+            instant={instant}
+          />
+        ))}
+      </div>
+    );
+  }
   const assets = plan.actions.filter((action) => action.action === "place_asset");
   const labels = plan.actions.filter((action) => action.action === "write_label");
   const arrows = plan.actions.filter((action) => action.action === "draw_arrow");

@@ -11,7 +11,17 @@ import { register } from "@/lib/teach/spatial";
 // pausable via the performer. Each band gets an invisible overlay div with
 // data-part="L<n>" so marks and the spatial index can target lines.
 
-type RenderResult = { png: string; w: number; h: number };
+// `parts` are named regions the diagram engine knows about (ER entity boxes,
+// relationship diamonds) in image pixels — what makes "point at the Doctor
+// box" possible instead of circling the whole drawing.
+export interface RenderPart {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+type RenderResult = { png: string; w: number; h: number; parts?: RenderPart[] };
 
 // Size hierarchy from the Stitch design (design/live-lesson-stitch.png),
 // tightened ~28% after iPad testing: at the original sizes a heading filled a
@@ -42,11 +52,19 @@ function themeHex(color: "ink" | "red" | "blue"): string {
   return /^#[0-9a-f]{6}$/i.test(v) ? v : "#1f2020";
 }
 
-// Main ink always comes back as the same dark raster and is theme-adjusted
+// Diagrams may use the engine's semantic palette (red = the failure, green =
+// committed, …). Those must NOT go through the dark-mode invert filter, which
+// would turn red into cyan — so a diagram is rendered in the theme's real ink
+// color up front and displayed unfiltered.
+export function isDiagramMarkup(markup: string): boolean {
+  return /\[(?:G|DRAW)\]/.test(markup);
+}
+
+// Main ink otherwise comes back as the same dark raster and is theme-adjusted
 // with CSS. That keeps already-rendered/cached handwriting readable if the
 // page changes theme after prefetch. Accent inks still use their theme token.
-function renderHex(color: "ink" | "red" | "blue"): string {
-  return color === "ink" ? "#1f2020" : themeHex(color);
+function renderHex(color: "ink" | "red" | "blue", diagram = false): string {
+  return color === "ink" && !diagram ? "#1f2020" : themeHex(color);
 }
 
 function fetchRender(markup: string, hex: string, role: WriteRole): Promise<RenderResult> {
@@ -96,9 +114,24 @@ export async function writeLabel(
 
 export function prefetchWrite(markup: string, color: "ink" | "red" | "blue"): void {
   try {
-    void fetchRender(markup, renderHex(color), roleFor(markup, color)).catch(() => {});
+    void fetchRender(markup, renderHex(color, isDiagramMarkup(markup)), roleFor(markup, color)).catch(() => {});
   } catch {
     /* SSR */
+  }
+}
+
+// Resolves when this write's handwriting raster is cached (or failed — the
+// performer must never deadlock on a render error). Used by the performance
+// pump to keep the pen and the voice on the same beat: speech holds briefly
+// until the strokes it narrates are ready to appear.
+export function writeReady(markup: string, color: "ink" | "red" | "blue"): Promise<void> {
+  try {
+    return fetchRender(markup, renderHex(color, isDiagramMarkup(markup)), roleFor(markup, color)).then(
+      () => undefined,
+      () => undefined,
+    );
+  } catch {
+    return Promise.resolve();
   }
 }
 
@@ -216,7 +249,8 @@ export function HandWrite({
     (async () => {
       try {
         const role = roleFor(markup, color);
-        const { png, w, h } = await fetchRender(markup, renderHex(color), role);
+        const diagram = isDiagramMarkup(markup);
+        const { png, w, h, parts } = await fetchRender(markup, renderHex(color, diagram), role);
         const img = new Image();
         img.src = `data:image/png;base64,${png}`;
         await img.decode();
@@ -234,7 +268,9 @@ export function HandWrite({
         const dw = Math.min(w, MAX_W);
         const dh = Math.round((h * dw) / w) || h;
         canvas.style.cssText = `width:${dw}px;height:${dh}px;display:block;`;
-        if (color === "ink") canvas.className = "handwrite-ink-raster";
+        // Diagrams are already themed server-side; inverting them would
+        // recolor the semantic palette (red → cyan).
+        if (color === "ink" && !diagram) canvas.className = "handwrite-ink-raster";
         host.style.position = "relative";
         host.appendChild(canvas);
         const ctx = canvas.getContext("2d")!;
@@ -275,21 +311,39 @@ export function HandWrite({
             });
           });
         });
+        // Named diagram regions become real mark targets ("erd#Doctor") and
+        // spatial-index entries, so the teacher can circle ONE entity.
+        for (const part of parts ?? []) {
+          const pEl = document.createElement("div");
+          pEl.setAttribute("data-part", part.id);
+          pEl.style.cssText = `position:absolute;left:${pct(part.x, w)};top:${pct(part.y, h)};width:${pct(part.w, w)};height:${pct(part.h, h)};pointer-events:none;`;
+          host.appendChild(pEl);
+          register({
+            id: `${writeId}#${part.id}`,
+            kind: "part",
+            itemKey: itemKey ?? writeId,
+            el: pEl,
+            text: part.id,
+          });
+        }
         register({ id: writeId, kind: "equation", itemKey: itemKey ?? writeId, el: canvas, tex: markup });
 
         if (instant) {
           ctx.drawImage(img, 0, 0);
           return;
         }
-        // Pen wipe: reveal each band left→right at a steady px/ms pace.
+        // Pen wipe: reveal each band left→right at a steady px/ms pace, but
+        // never longer than ~900ms per band — a wide diagram band otherwise
+        // drew for seconds while the voice moved on to the next sentence.
         const PX_PER_MS = 0.55;
         for (const b of bands) {
           const bw = b.x1 - b.x0;
+          const pxPerMs = Math.max(PX_PER_MS, bw / 900);
           let revealed = 0;
           while (revealed < bw) {
             while (performer.paused()) await new Promise((r) => setTimeout(r, 150));
             await new Promise((r) => requestAnimationFrame(r));
-            revealed = Math.min(bw, revealed + PX_PER_MS * 16);
+            revealed = Math.min(bw, revealed + pxPerMs * 16);
             const sw = b.x0 + revealed;
             ctx.clearRect(0, b.y0, sw, b.y1 - b.y0);
             ctx.drawImage(img, 0, b.y0, sw, b.y1 - b.y0, 0, b.y0, sw, b.y1 - b.y0);

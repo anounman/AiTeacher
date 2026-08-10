@@ -8,6 +8,7 @@ import { ModeToggle } from "@/components/ModeToggle";
 import { TeachStage } from "@/components/teach/TeachStage";
 import { PersonaEditor } from "@/components/PersonaEditor";
 import { performer } from "@/lib/teach/performer";
+import { boardInventory } from "@/lib/teach/protocol";
 import type {
   Attachment,
   Conversation,
@@ -500,9 +501,20 @@ export default function Page() {
     // Teach mode: a message sent while the teacher is mid-performance is an
     // interruption — pause the performance, remember which lesson to resume,
     // and hand the model the plan + progress + any marked board region.
-    let teachContext: { lessonMd?: string; deliveredUpTo?: string; selection?: string } | undefined;
+    let teachContext:
+      | { lessonMd?: string; deliveredUpTo?: string; selection?: string; board?: string }
+      | undefined;
     if (conversation.mode === "teach") {
       const sel = performer.takeSelection() ?? undefined;
+      // What is already drawn, on EVERY teach turn — not just interruptions.
+      // A finished lesson used to send no board context at all, so a
+      // follow-up ("explain that again") had no ids to point at.
+      const board = boardInventory(
+        messages
+          .filter((m) => m.role === "assistant")
+          .map((m) => m.content)
+          .join("\n\n"),
+      );
       if (performer.isActive() && teachLiveId) {
         performer.pause();
         teachInterruptedRef.current = teachLiveId;
@@ -511,9 +523,10 @@ export default function Page() {
           lessonMd: teachLiveMd,
           deliveredUpTo: `${s.cursor} of ${s.total} events (last shown: ${s.lastShown ?? "nothing yet"})`,
           selection: sel,
+          board: board || undefined,
         };
-      } else if (sel) {
-        teachContext = { selection: sel };
+      } else if (sel || board) {
+        teachContext = { selection: sel, board: board || undefined };
       }
     }
     const userMsg: MessageWithSources = {
