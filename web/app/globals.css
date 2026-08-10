@@ -557,6 +557,9 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4a4b49; }
 .board-world {
   width: 900px;
   color: var(--ink);
+  /* The toolbar is a floating overlay across the top of the canvas. Without a
+     lead-in the first line of a lesson sits underneath it. */
+  padding-top: 24px;
 }
 /* Mathwriter's main ink is a stable dark raster. Theme it at paint time so
    cached handwriting cannot disappear when dark mode is applied later. */
@@ -577,7 +580,17 @@ html[data-theme="dark"] .board-world { color: var(--ink); }
    Tightened with the smaller hand (ROLE_SCALE): notebook lines, not posters. */
 .board-item-write + .board-item-write { margin-top: 18px; }
 .board-item-write { margin-top: 12px; }
-.board-item-heading, .board-item-write:first-child { margin-top: 0; }
+/* Role-aware rhythm. A uniform 18px between every written line is what made a
+   long lesson read as one dense block: the eye had no grouping to hold on to.
+   A heading opens a new topic and needs a real break above it; consecutive
+   equations are steps in one derivation and stay close; an annotation belongs
+   to the line above it and tucks in. */
+.board-write-heading { margin-top: 52px; }
+.board-write-equation { margin-top: 22px; }
+.board-write-equation + .board-write-equation { margin-top: 16px; }
+.board-write-annotation { margin-top: 8px; margin-left: 26px; }
+.board-item-heading, .board-item-write:first-child,
+.board-section > .board-item:first-child { margin-top: 0; }
 .board-item-mark { margin-top: 5px; margin-left: 22px; }
 .board-item-code { margin-top: 18px; }
 .board-item-latex { margin-top: 26px; }

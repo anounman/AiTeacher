@@ -7,7 +7,7 @@ import { StrokeText } from "./StrokeText";
 import { MathWriteOn } from "./MathWriteOn";
 import { MathMark } from "./MathMark";
 import { CodeWriteOn } from "./CodeWriteOn";
-import { HandWrite } from "./HandWrite";
+import { roleFor, HandWrite } from "./HandWrite";
 import { VisualScene } from "./VisualScene";
 import { ConceptGraphScene } from "./ConceptGraphScene";
 import type { PositionedGraph } from "@/lib/visual-engine/index";
@@ -92,7 +92,16 @@ export function Board({
       key={e.key}
       data-entry-key={e.key}
       ref={e.key === lastKey ? lastRef : undefined}
+      // A heading, an equation and a margin note are all `write` actions, so
+      // uniform spacing gave every lesson the same wall of evenly-packed
+      // lines. The role the renderer already infers for SIZE decides the
+      // rhythm too: a new topic gets air above it, an annotation tucks under
+      // the thing it annotates.
       className={`board-item board-item-${e.action.type} ${
+        e.action.type === "write"
+          ? `board-write-${roleFor(e.action.markup, e.action.color ?? "ink")}`
+          : ""
+      } ${
         "id" in e.action && e.action.id && boxed.has(e.action.id) ? "board-item-boxed" : ""
       }`}
     >

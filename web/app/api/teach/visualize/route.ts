@@ -34,7 +34,10 @@ export async function POST(req: Request) {
   // does the layout, so the overlap failures the director produced cannot
   // occur. Flag-gated and falling through on any failure, because a lesson
   // that already played is not worth breaking for a nicer picture.
-  if (process.env.VISUAL_ENGINE === "1") {
+  // On by default now. The director's diagrams were the crude axes-and-triangle
+  // sketches on the board; the engine cannot produce those, because layout is
+  // code. VISUAL_ENGINE=0 restores the director.
+  if (process.env.VISUAL_ENGINE !== "0") {
     const topic = lessonTopic(lessonMd);
     if (topic) {
       try {

@@ -94,6 +94,18 @@ function requestVisualDirection(messageId: string, lessonMd: string): Promise<Di
   });
   visualRequests.set(messageId, request);
   request.catch(() => visualRequests.delete(messageId));
+
+  // Render QA rides along beside the visual pass: every hand-drawn diagram in
+  // the finished lesson gets rendered, looked at by the vision slot, and
+  // rewritten if it came out broken. Fire-and-forget — it rewrites the stored
+  // lesson so a reload shows the repaired board, and never touches the
+  // performance the student is currently watching.
+  void fetch("/api/teach/repair", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lessonMd, messageId }),
+  }).catch(() => {});
+
   return request;
 }
 
