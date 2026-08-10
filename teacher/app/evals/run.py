@@ -26,6 +26,7 @@ import httpx
 
 from app.evals.dataset import GoldItem, load
 from app.evals.metrics import (
+    answers_from_general_knowledge,
     citation_score,
     looks_like_abstention,
     mean,
@@ -108,15 +109,20 @@ async def _ask(client: httpx.AsyncClient, item: GoldItem) -> str:
 
 
 async def score_answers(items: list[GoldItem], limit: int | None = None) -> dict:
-    subset = items[:limit] if limit else items
-    answerable = [i for i in subset if not i.is_trap]
-    traps = [i for i in subset if i.is_trap]
+    # `limit` caps the answerable questions only. Traps always all run: they
+    # are the cheap half and the half that catches the worst failure, so
+    # sampling them away would defeat the point of a quick pass.
+    answerable = [i for i in items if not i.is_trap]
+    if limit:
+        answerable = answerable[:limit]
+    traps = [i for i in items if i.is_trap]
 
     precision: list[float] = []
     recall: list[float] = []
     hallucinated_total = 0
     abstained_correctly = 0
     abstained_wrongly = 0
+    labelled_general_knowledge = 0
 
     async with httpx.AsyncClient(timeout=300.0) as client:
         for item in answerable:
@@ -148,6 +154,8 @@ async def score_answers(items: list[GoldItem], limit: int | None = None) -> dict
             answer = await _ask(client, item)
             if looks_like_abstention(answer):
                 abstained_correctly += 1
+                if answers_from_general_knowledge(answer):
+                    labelled_general_knowledge += 1
 
     return {
         "n_answerable": len(answerable),
@@ -157,6 +165,9 @@ async def score_answers(items: list[GoldItem], limit: int | None = None) -> dict
         "hallucinated_markers": hallucinated_total,
         "abstention_accuracy": round(abstained_correctly / len(traps), 3) if traps else 0.0,
         "wrong_abstentions": abstained_wrongly,
+        # Abstained, then answered anyway from its own memory. Allowed when
+        # labelled, but worth watching rather than discovering in a lesson.
+        "labelled_general_knowledge": labelled_general_knowledge,
     }
 
 

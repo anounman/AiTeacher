@@ -47,12 +47,60 @@ def test_citing_a_real_but_wrong_source_keeps_precision_and_loses_recall():
     assert score.recall == 0.0
 
 
-def test_abstention_matches_the_phrasing_the_prompt_asks_for():
-    assert looks_like_abstention("I can't find that in your uploaded materials.")
-    assert looks_like_abstention("That is not in your materials — want to add a source?")
-    assert not looks_like_abstention("The Calvin cycle produces glucose.")
-    # Hedging is not abstention.
-    assert not looks_like_abstention("I think it might be around 40 percent, roughly.")
+# Verbatim from real trap answers. The first version of the detector matched
+# fixed sentences and scored both of these as failures to abstain, which would
+# have sent us hunting a model bug that did not exist.
+REAL_ABSTENTIONS = [
+    "I can't find anything about the 1932 Belfast harbour workers' strike in your "
+    "uploaded materials — those are all about computer system architecture.",
+    "This question isn't related to your uploaded course materials — those cover "
+    "computer architecture, digital circuits, adders, and similar topics. So I "
+    "can't pull an answer from them.",
+    "I can't find that in your uploaded materials.",
+    "That is not in your materials — want to add a source?",
+    "There's nothing about axolotls in your uploaded materials.",
+    "Your materials don't cover medieval falconry.",
+    # Second round, also verbatim. The detector matched none of these at first
+    # and reported a tutor that was refusing correctly as a fabricator.
+    "That's a great question, but it falls outside the course materials I have "
+    "available. So I can't pull this from your uploaded sources.",
+    "This is a great historical question, but it falls outside the scope of your "
+    "uploaded course materials. So I can't ground this answer in your sources.",
+    "I don't have a reliable figure for the average annual rainfall on Bouvet Island.",
+    "None of your lecture notes cover the mating rituals of the axolotl.",
+    "I've searched through your uploaded course materials and I can't find any "
+    "mention of the price of tin in 1873.",
+    "I can't find any record of an assignment about medieval falconry.",
+]
+
+NOT_ABSTENTIONS = [
+    "The Calvin cycle produces glucose.",
+    "I think it might be around 40 percent, roughly.",
+    "I'm not certain about the exact figure.",
+    "Your materials describe three register flavors in Chisel.",
+]
+
+
+def test_real_refusal_phrasings_are_recognised():
+    for answer in REAL_ABSTENTIONS:
+        assert looks_like_abstention(answer), answer
+
+
+def test_hedging_and_normal_answers_are_not_abstentions():
+    for answer in NOT_ABSTENTIONS:
+        assert not looks_like_abstention(answer), answer
+
+
+def test_labelled_general_knowledge_is_detected_separately():
+    from app.evals.metrics import answers_from_general_knowledge
+
+    answer = (
+        "This isn't in your materials. From general knowledge, a Sumatran rhino "
+        "calf weighs around 25-30 kg at birth."
+    )
+    assert looks_like_abstention(answer)
+    assert answers_from_general_knowledge(answer)
+    assert not answers_from_general_knowledge("It weighs about 25 kg.")
 
 
 def test_marker_extraction_ignores_prose_brackets():
