@@ -42,7 +42,13 @@ QUALITY = os.environ.get("TEACHER_CLIP_QUALITY", "medium_quality")
 # Bump when a scene builder or the palette changes. The cache key covers the
 # RECIPE as well as the spec: without this, restyling the clips silently kept
 # serving the old renders, because the spec had not changed.
-RENDER_VERSION = 2
+RENDER_VERSION = 3
+
+# LaTeX toolchain for MathTex. teacher/bin holds a dvisvgm shim (see the file
+# for why); brew texlive supplies latex + standalone.cls. Prepended, not
+# replaced, so a machine with a working system TeX is unaffected.
+_TEX_BIN = str(pathlib.Path(__file__).resolve().parents[2] / "bin")
+os.environ["PATH"] = _TEX_BIN + os.pathsep + "/opt/homebrew/bin" + os.pathsep + os.environ.get("PATH", "")
 
 # The board's palette (web/app/globals.css). Manim's defaults are white-on-
 # black, which reads as a video embedded in the lesson rather than part of it.
@@ -84,7 +90,47 @@ class RiemannClip(BaseModel):
     label: str = ""
 
 
-ClipSpec = TangentClip | RiemannClip
+class WriteMathClip(BaseModel):
+    """Typeset math written stroke-by-stroke — Manim's Write() animation over
+    real LaTeX. This is the experiment: the board's pen for equations, replacing
+    mathwriter's harvested-glyph handwriting with 3b1b-style draw-on."""
+
+    kind: Literal["write_math"] = "write_math"
+    tex: str = Field(max_length=400, description="LaTeX math, no $ delimiters")
+    scale: float = Field(default=1.3, ge=0.5, le=2.5)
+    seconds: float = Field(default=2.5, ge=0.8, le=8.0, description="writing duration")
+    color: Literal["ink", "red", "blue"] = "ink"
+
+
+class WriteTextClip(BaseModel):
+    """Prose or a heading written on with Manim's Write() — the text half of
+    the same experiment."""
+
+    kind: Literal["write_text"] = "write_text"
+    text: str = Field(max_length=200)
+    heading: bool = False
+    seconds: float = Field(default=2.0, ge=0.6, le=8.0)
+    color: Literal["ink", "red", "blue"] = "ink"
+
+
+ClipSpec = TangentClip | RiemannClip | WriteMathClip | WriteTextClip
+
+
+_TEX_FORBIDDEN = (
+    "\\input", "\\include", "\\write", "\\read", "\\openout", "\\openin",
+    "\\catcode", "\\csname", "\\immediate", "\\special", "\\usepackage",
+    "\\def", "\\loop", "\\directlua",
+)
+
+
+def check_tex(tex: str) -> None:
+    """MathTex input is model-authored. LaTeX is a programming language with
+    file I/O; these commands have no place in a displayed formula, so their
+    presence is treated as an attack rather than a style choice."""
+    lowered = tex.lower()
+    for token in _TEX_FORBIDDEN:
+        if token in lowered:
+            raise UnsafeExpression(f"TeX command not allowed in a formula: {token}")
 
 
 def spec_hash(spec: ClipSpec) -> str:
@@ -121,6 +167,27 @@ def _build_scene(spec: ClipSpec):
     from manim import (  # noqa: PLC0415
         UL, Axes, Create, Dot, FadeIn, Scene, Text, ValueTracker, always_redraw,
     )
+
+    if isinstance(spec, (WriteMathClip, WriteTextClip)):
+        from manim import MathTex, Write  # noqa: PLC0415
+
+        ink = {"ink": INK, "red": EMPHASIS, "blue": ACCENT}[spec.color]
+
+        class WriteScene(Scene):
+            def construct(self) -> None:
+                if isinstance(spec, WriteMathClip):
+                    check_tex(spec.tex)
+                    mobject = MathTex(spec.tex, color=ink).scale(spec.scale)
+                else:
+                    size = 44 if spec.heading else 30
+                    mobject = Text(spec.text, color=ink, font_size=size)
+                # Write() draws each glyph's outline like a pen, then fills —
+                # the animated handwriting this experiment exists to evaluate.
+                self.play(Write(mobject), run_time=spec.seconds)
+                self.wait(0.3)
+
+        return WriteScene
+
 
     f = compile_expression(spec.expression)
     samples = [float(f(spec.x_min + (spec.x_max - spec.x_min) * i / 40)) for i in range(41)]
@@ -170,7 +237,7 @@ def _build_scene(spec: ClipSpec):
 
         return TangentScene
 
-    class AreaScene(Scene):
+    class AreaScene(Scene):  # noqa: F811 — dispatch below picks one class
         def construct(self) -> None:
             axes = Axes(
                 x_range=[spec.x_min, spec.x_max],
@@ -227,9 +294,12 @@ async def render_clip(spec: ClipSpec) -> dict[str, Any]:
     if final.exists():
         return {"id": digest, "path": str(final), "cached": True, "kind": spec.kind}
 
-    # Validate before taking the lock: a bad expression should fail instantly,
-    # not behind another render.
-    compile_expression(spec.expression)
+    # Validate before taking the lock: bad input should fail instantly, not
+    # behind another render.
+    if isinstance(spec, WriteMathClip):
+        check_tex(spec.tex)
+    elif not isinstance(spec, WriteTextClip):
+        compile_expression(spec.expression)
 
     work = CLIP_DIR / f"work-{digest}"
     async with _render_lock:

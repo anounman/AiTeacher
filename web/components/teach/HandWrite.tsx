@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { signalDone } from "@/lib/teach/completion";
 import { performer } from "@/lib/teach/performer";
 import { register } from "@/lib/teach/spatial";
+import { markupToTex, manimWriterEnabled } from "@/lib/teach/markup-to-tex";
+import { ManimWrite } from "./ManimWrite";
 import { voiceClock } from "@/lib/teach/voice-clock";
 import { alignStepsToSpeech, type WordCue } from "@/lib/teach/alignment";
 
@@ -265,10 +267,20 @@ export function HandWrite({
   // rides along and the graph is built here.
   beatSpeech?: Array<{ eventIndex: number; text: string }>;
 }) {
+  // The Manim-writer experiment: when the toggle is on and this item converts
+  // to LaTeX faithfully, a typeset Write() clip takes the pen. Anything the
+  // converter cannot express (tables, multi-line, unknown glyphs) — and any
+  // render failure — falls straight back to mathwriter below.
+  const [manimFailed, setManimFailed] = useState(false);
+  const manimSpec = useMemo(
+    () => (manimWriterEnabled() && !manimFailed ? markupToTex(markup) : null),
+    [markup, manimFailed],
+  );
   const hostRef = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    if (manimSpec) return; // the Manim writer owns this item — no PNG fetch
     const host = hostRef.current;
     if (!host || host.dataset.started) return;
     host.dataset.started = "1";
@@ -483,6 +495,18 @@ export function HandWrite({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  if (manimSpec) {
+    return (
+      <ManimWrite
+        spec={manimSpec}
+        writeId={writeId}
+        color={color}
+        itemKey={itemKey}
+        instant={instant}
+        onFallback={() => setManimFailed(true)}
+      />
+    );
+  }
   if (failed) {
     return (
       <pre className="mono whitespace-pre-wrap rounded-[3px] border border-line bg-paper-2 px-3 py-2 text-[13px] text-ink-2">

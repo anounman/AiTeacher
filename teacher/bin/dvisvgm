@@ -1,0 +1,14 @@
+#!/bin/sh
+# dvisvgm shim for Manim (see app/performance/clips.py).
+#
+# Two fixes for Homebrew's dvisvgm, which searches for kpathsea data relative
+# to its own Cellar prefix and finds nothing:
+#   1. TEXMFCNF points it at brew texlive's real config. Without it every run
+#      fell back to brute-force font processing — 5s per formula instead of
+#      3ms — and could not find the PostScript header files.
+#   2. --no-specials skips PS specials entirely. They only carry color and
+#      tightpage hints; Manim colors the glyph paths itself.
+for cnf in /opt/homebrew/Cellar/texlive/*/share/texmf-dist/web2c; do
+  TEXMFCNF="$cnf"; export TEXMFCNF
+done
+exec /opt/homebrew/bin/dvisvgm --no-specials "$@"
