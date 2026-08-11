@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Board, type BoardEntry } from "./Board";
 import { clipUrl } from "./ClipScene";
+import { diagramGraph } from "./DiagramScene";
 import { loadEngine } from "@/lib/teach/handwriting";
 import { prefetchStrokeText } from "./StrokeText";
 import { prefetchWrite, writeReady } from "./HandWrite";
@@ -66,7 +67,7 @@ function actionTimeoutMs(action: TeachAction): number {
   }
 }
 
-const AWAITED = new Set(["latex", "text", "heading", "mark", "code", "write", "clip"]);
+const AWAITED = new Set(["latex", "text", "heading", "mark", "code", "write", "clip", "diagram"]);
 const VOICED_SETTLE_MS = 1_100;
 // A cue never waits on a voice that has made NO progress for this long.
 // Speech synthesis can stall, a browser can throttle a background tab, and a
@@ -120,7 +121,11 @@ function requestVisualDirection(messageId: string, lessonMd: string): Promise<Di
   // pen reaches them warm instead of waiting on Manim mid-sentence.
   try {
     for (const event of parseTeachEvents(lessonMd, true)) {
-      if (event.kind === "draw" && event.action.type === "clip") void clipUrl(event.action);
+      if (event.kind !== "draw") continue;
+      // Both tracks are generated, not drawn locally, and both take about a
+      // second cold. Starting them now means the pen arrives to a cache hit.
+      if (event.action.type === "clip") void clipUrl(event.action);
+      if (event.action.type === "diagram") void diagramGraph(event.action.concept);
     }
   } catch {
     /* prefetch is best-effort */

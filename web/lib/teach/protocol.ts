@@ -69,6 +69,16 @@ export const teachActionSchema = z.discriminatedUnion("type", [
     label: z.string().max(120).optional(),
     id: z.string().optional(),
   }),
+  // A diagram drawn by the visual engine (lib/visual-engine): the model names
+  // the CONCEPT, an LLM turns it into a semantic graph with no coordinates,
+  // and deterministic code lays it out. This replaces [G]/[DRAW] markup, whose
+  // diagrams the model positioned by hand and which is where the overlapping,
+  // crude board sketches came from.
+  z.object({
+    type: z.literal("diagram"),
+    concept: z.string().min(3).max(200),
+    id: z.string().optional(),
+  }),
   z.object({
     type: z.literal("concept_graph"),
     graph: z.unknown(),
