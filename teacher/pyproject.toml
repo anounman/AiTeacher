@@ -23,6 +23,11 @@ parse = [
     "docling>=2.0",
     "markitdown[all]>=0.1",
 ]
+# Animated clips (app/performance/clips.py). Optional: the service runs
+# without it and simply reports that clip rendering is unavailable.
+clips = [
+    "manim>=0.19",
+]
 agents = [
     "deepagents>=0.2",
     "langchain-ollama>=0.3",

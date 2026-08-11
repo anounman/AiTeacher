@@ -29,6 +29,15 @@ PORT = 8931
 _lock = threading.Lock()  # render.py uses module-level random/glyph state
 
 
+def _encode_l(img) -> str:
+    """8-bit map → base64 PNG, or "" when the render produced none."""
+    if img is None:
+        return ""
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+
 def _crop_alpha(img: Image.Image, pad: int = 6) -> Image.Image:
     bbox = img.getbbox()
     if not bbox:
@@ -37,12 +46,16 @@ def _crop_alpha(img: Image.Image, pad: int = 6) -> Image.Image:
     box = (max(0, x0 - pad), max(0, y0 - pad),
            min(img.width, x1 + pad), min(img.height, y1 + pad))
     out = img.crop(box)
-    # Keep named part boxes aligned with the cropped image.
-    parts = img.info.get('parts')
-    if parts:
-        out.info['parts'] = [
-            {**p, 'x': p['x'] - box[0], 'y': p['y'] - box[1]} for p in parts
-        ]
+    # Keep named part boxes and stroke steps aligned with the cropped image.
+    for key in ('parts', 'steps'):
+        boxes = img.info.get(key)
+        if boxes:
+            out.info[key] = [
+                {**b, 'x': b['x'] - box[0], 'y': b['y'] - box[1]} for b in boxes
+            ]
+    step_map = img.info.get('step_map')
+    if step_map is not None:
+        out.info['step_map'] = step_map.crop(box)
     return out
 
 
@@ -95,6 +108,12 @@ def _has_semantic_color(img: Image.Image) -> bool:
 # the engine's named part boxes survive (page layout would lose the offset),
 # so the board can point at "erd#Doctor".
 _SOLO_G = re.compile(r"^\s*\[G\]\s*(\{.*\})\s*\[/G\]\s*$", re.DOTALL)
+# A write action that is nothing but one [DRAW] block — the common shape for a
+# hand-drawn figure. Rendering it directly (instead of through the page
+# layout) is what lets the per-command stroke steps survive to the client, so
+# the board can draw the figure the way it was drawn rather than wiping the
+# finished picture on in one pass.
+_SOLO_DRAW = re.compile(r"^\s*\[DRAW\]\s*(.*?)\s*\[/DRAW\]\s*$", re.DOTALL)
 
 
 def render_markup_svg(markup: str, scale: float) -> dict:
@@ -155,6 +174,22 @@ def render_markup_svg(markup: str, scale: float) -> dict:
 
 
 def render_markup(markup: str, scale: float, color: str) -> Image.Image:
+    solo_draw = _SOLO_DRAW.match(markup)
+    if solo_draw:
+        with _lock:
+            # render_pages draws [DRAW] blocks at scale*0.75 — match it.
+            img, _bl = rd.render_draw(
+                solo_draw.group(1), rd.load_glyphs(), scale=scale * 0.75
+            )
+        img = _crop_alpha(img)
+        colored = _has_semantic_color(img)
+        if color:
+            kept = {k: img.info.get(k) for k in ("steps", "step_map")}
+            img = _recolor(img, color)
+            img.info.update({k: v for k, v in kept.items() if v is not None})
+        img.info["colored"] = colored
+        return img
+
     solo = _SOLO_G.match(markup)
     if solo:
         try:
@@ -248,6 +283,11 @@ class Handler(BaseHTTPRequestHandler):
                 # Named regions inside a diagram (entity boxes, relationship
                 # diamonds) so the board can point at one part of it.
                 "parts": img.info.get("parts") or [],
+                # Per-command ink boxes in drawing order plus the pixel→stroke
+                # map, so the board replays a figure stroke by stroke, cued to
+                # what the tutor is saying.
+                "steps": img.info.get("steps") or [],
+                "stepMap": _encode_l(img.info.get("step_map")),
                 # The drawing uses deliberate palette colors — the client must
                 # not invert it for dark mode.
                 "colored": bool(img.info.get("colored")),

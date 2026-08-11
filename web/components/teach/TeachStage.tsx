@@ -839,19 +839,15 @@ export function TeachStage({
             // narration where they are spoken (against the same cleaned text
             // the TTS reads, so character offsets line up). HandWrite reveals
             // each cued word when the voice clock passes its edge.
+            const beatSpeech = beat.speech.map((s) => ({
+              eventIndex: s.eventIndex,
+              text: speakable(s.event.text),
+            }));
             const wordCues =
-              action.type === "write"
-                ? alignWriteToSpeech(
-                    action.markup,
-                    beat.speech.map((s) => ({
-                      eventIndex: s.eventIndex,
-                      text: speakable(s.event.text),
-                    })),
-                  )
-                : [];
+              action.type === "write" ? alignWriteToSpeech(action.markup, beatSpeech) : [];
             setLiveEntries((entries) => {
               if (entries.some((entry) => entry.key === key)) return entries;
-              return [...entries, { action, key, live: true, anchor, wordCues }];
+              return [...entries, { action, key, live: true, anchor, wordCues, beatSpeech }];
             });
             // Pointing at earlier work: bring the camera to the thing being
             // marked (it can be far above the newest writing) as soon as the

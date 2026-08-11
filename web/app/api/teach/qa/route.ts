@@ -20,9 +20,17 @@ const MAX_CORRECTION_CHARS = 1200;
 
 const QA_PROMPT = `You are the quality controller for a whiteboard tutor. Below is the lesson so far: spoken lines and the board actions (JSON) the tutor wrote.
 
+The board markup is mathwriter, NOT markdown. Do not "fix" its notation — these are all correct and intentional:
+- \`~~Text~~\` is an UNDERLINED HEADING (never strikethrough).
+- \`[F]a|b[/F]\` is a fraction, \`[R]x[/R]\` a square root, \`[B]x[/B]\` bold, \`[X]x[/X]\` crossed-out working.
+- \`[G]{...}[/G]\` and \`[DRAW]...[/DRAW]\` are hand-drawn figures.
+- Superscripts/subscripts as written (x², e⁻) are fine.
+
 Check, in order of importance:
 1. CORRECTNESS — any mathematical or factual error in what was said or written.
 2. BOARD QUALITY — writing that contradicts the speech, duplicated lines, a formula with wrong symbols.
+
+Report ONLY errors a student would be taught wrong by. Never comment on notation, styling, or markup syntax.
 
 Reply with STRICT JSON only, no prose around it:
 {"ok": true}

@@ -49,7 +49,7 @@ TEXT 150,120 "Yes" center=true
 """
 
 import math, random, re
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 import numpy as np
 
 INK_RGB = (15, 70, 180)
@@ -802,6 +802,45 @@ def execute_draw(commands, glyphs, scale=0.7):
     def _ty(y):
         return y - min_y + MARGIN
 
+    # Per-command ink boxes, in drawing order, so the board can reveal a
+    # diagram the way it was drawn — nucleus first, then the orbits, then the
+    # electrons — instead of wiping the finished picture on in one pass.
+    # Measured by diffing the alpha channel around each command rather than
+    # by re-deriving each primitive's geometry: exact for wobble, overshoot,
+    # arrowheads and glyph metrics, and it cannot drift from the renderer.
+    # Boxes alone are not enough to replay the drawing: the outer orbit's box
+    # contains the whole atom, so painting boxes in order would reveal the
+    # electrons with it. `step_map` records which command owns each ink pixel
+    # (1-based, 0 = bare paper), so the board can paint stroke N and nothing
+    # else. One extra 8-bit channel, no per-step image payload.
+    steps = []
+    prev_alpha = canvas.getchannel('A')
+    step_map = np.zeros((canvas_h, canvas_w), dtype=np.uint8)
+
+    def _record_step(c):
+        nonlocal prev_alpha
+        now = canvas.getchannel('A')
+        diff = ImageChops.difference(prev_alpha, now)
+        box = diff.getbbox()
+        prev_alpha = now
+        if not box:
+            return
+        # 255 commands is far past any readable figure; later strokes just
+        # join the last band rather than wrapping around to 0 (= paper).
+        index = min(len(steps) + 1, 255)
+        fresh = (np.array(diff) > 8) & (step_map == 0)
+        step_map[fresh] = index
+        x0, y0, x1, y1 = box
+        label = ''
+        if c['cmd'] == 'TEXT' and len(c['args']) > 1:
+            label = ' '.join(c['args'][1:]).strip('"')
+        steps.append({
+            'id': f'step{len(steps)}',
+            'cmd': c['cmd'],
+            'label': label,
+            'x': x0, 'y': y0, 'w': x1 - x0, 'h': y1 - y0,
+        })
+
     # Second pass: render
     for c in commands:
         cmd = c['cmd']
@@ -903,5 +942,8 @@ def execute_draw(commands, glyphs, scale=0.7):
                 draw_highlight(canvas, _tx(x), _ty(y), w, h)
         except (IndexError, ValueError) as e:
             continue
+        _record_step(c)
 
+    canvas.info['steps'] = steps
+    canvas.info['step_map'] = Image.fromarray(step_map, 'L')
     return canvas, canvas_h // 2

@@ -5,7 +5,7 @@ import { signalDone } from "@/lib/teach/completion";
 import { performer } from "@/lib/teach/performer";
 import { register } from "@/lib/teach/spatial";
 import { voiceClock } from "@/lib/teach/voice-clock";
-import type { WordCue } from "@/lib/teach/alignment";
+import { alignStepsToSpeech, type WordCue } from "@/lib/teach/alignment";
 
 // Board content written by the mathwriter engine (real handwritten glyphs,
 // via /api/handwrite → python sidecar). The PNG is revealed band-by-band
@@ -23,7 +23,22 @@ export interface RenderPart {
   w: number;
   h: number;
 }
-type RenderResult = { png: string; w: number; h: number; parts?: RenderPart[] };
+// A [DRAW] figure also reports how it was drawn: one entry per primitive in
+// drawing order, plus an 8-bit map naming the stroke that owns each ink pixel
+// (1-based; 0 = paper). Together they let the board replay the figure the way
+// a hand made it instead of wiping the finished picture on.
+export interface RenderStep extends RenderPart {
+  cmd: string;
+  label: string;
+}
+type RenderResult = {
+  png: string;
+  w: number;
+  h: number;
+  parts?: RenderPart[];
+  steps?: RenderStep[];
+  stepMap?: string;
+};
 
 // Size hierarchy from the Stitch design (design/live-lesson-stitch.png),
 // tightened ~28% after iPad testing: at the original sizes a heading filled a
@@ -235,6 +250,7 @@ export function HandWrite({
   itemKey,
   instant = false,
   wordCues,
+  beatSpeech,
 }: {
   markup: string;
   writeId: string;
@@ -244,6 +260,10 @@ export function HandWrite({
   // Word graph edges (lib/teach/alignment): when present, each cued word
   // reveals as the voice clock passes the spot where it is spoken.
   wordCues?: WordCue[];
+  // This beat's narration (already TTS-cleaned). A figure's stroke cues can
+  // only be built once the sidecar reports its primitives, so the raw speech
+  // rides along and the graph is built here.
+  beatSpeech?: Array<{ eventIndex: number; text: string }>;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
@@ -256,7 +276,11 @@ export function HandWrite({
       try {
         const role = roleFor(markup, color);
         const diagram = isDiagramMarkup(markup);
-        const { png, w, h, parts } = await fetchRender(markup, renderHex(color, diagram), role);
+        const { png, w, h, parts, steps, stepMap } = await fetchRender(
+          markup,
+          renderHex(color, diagram),
+          role,
+        );
         const img = new Image();
         img.src = `data:image/png;base64,${png}`;
         await img.decode();
@@ -353,6 +377,68 @@ export function HandWrite({
           }
         };
 
+        const awaitVoice = async (cue: { eventIndex: number; charIndex: number }) => {
+          // Stall fuse only — normally the voice clock arrives first.
+          let waited = 0;
+          while (!voiceClock.reached(cue.eventIndex, cue.charIndex) && waited < 5000) {
+            await new Promise((r) => setTimeout(r, 60));
+            if (!performer.paused()) waited += 60;
+          }
+        };
+
+        // Stroke-synced reveal for hand-drawn figures: the sidecar reports
+        // which primitive owns each ink pixel, so the nucleus appears while
+        // the tutor says "nucleus" and the orbits follow as they are named,
+        // instead of the whole figure wiping on at once.
+        if (diagram && steps?.length && stepMap) {
+          const stepCues = beatSpeech?.length
+            ? alignStepsToSpeech(steps, beatSpeech)
+            : steps.map(() => null);
+          const map = new Image();
+          map.src = `data:image/png;base64,${stepMap}`;
+          await map.decode().catch(() => {});
+          const mapCanvas = document.createElement("canvas");
+          mapCanvas.width = w;
+          mapCanvas.height = h;
+          const mapCtx = mapCanvas.getContext("2d", { willReadFrequently: true });
+          mapCtx?.drawImage(map, 0, 0);
+          const owner = mapCtx?.getImageData(0, 0, w, h).data;
+
+          if (owner) {
+            // Source pixels once; each stroke copies only the pixels it owns
+            // into the visible canvas, so overlapping bounding boxes cannot
+            // leak a later stroke in early.
+            const source = document.createElement("canvas");
+            source.width = w;
+            source.height = h;
+            source.getContext("2d")?.drawImage(img, 0, 0);
+            const src = source.getContext("2d")?.getImageData(0, 0, w, h);
+            const out = ctx.createImageData(w, h);
+            if (src) {
+              for (let i = 0; i < steps.length; i++) {
+                const cue = stepCues?.[i];
+                if (cue) await awaitVoice(cue);
+                await waitUnpaused();
+                const index = Math.min(i + 1, 255);
+                for (let p = 0; p < owner.length; p += 4) {
+                  if (owner[p] !== index) continue;
+                  out.data[p] = src.data[p]!;
+                  out.data[p + 1] = src.data[p + 1]!;
+                  out.data[p + 2] = src.data[p + 2]!;
+                  out.data[p + 3] = src.data[p + 3]!;
+                }
+                ctx.putImageData(out, 0, 0);
+                // A stroke needs a beat of its own, or a 20-primitive figure
+                // still lands in one frame.
+                await new Promise((r) => setTimeout(r, cue ? 90 : 190));
+              }
+              // Anything the map missed (antialiased edges below threshold).
+              ctx.drawImage(img, 0, 0);
+              return;
+            }
+          }
+        }
+
         // Word-synced reveal: each written word waits for the voice to say it
         // (the word graph built in the pump), so pen and voice move together
         // word by word. Diagrams and sparse graphs fall back to the paced
@@ -368,14 +454,7 @@ export function HandWrite({
             let revealedX = 0;
             for (let wi = 0; wi < boxes.length; wi++) {
               const cue = cueByWord.get(flatBase + Math.min(wi, lineWordCount - 1));
-              if (cue) {
-                // Stall fuse only — normally the voice clock arrives first.
-                let waited = 0;
-                while (!voiceClock.reached(cue.eventIndex, cue.charIndex) && waited < 5000) {
-                  await new Promise((r) => setTimeout(r, 60));
-                  if (!performer.paused()) waited += 60;
-                }
-              }
+              if (cue) await awaitVoice(cue);
               await sweepBandTo(b, revealedX, boxes[wi]!.x1 + 2, 240);
               revealedX = boxes[wi]!.x1 + 2;
             }

@@ -139,6 +139,53 @@ function tokenMatches(spoken: string, said: string): boolean {
  * their neighbours). Returns [] when fewer than 30% of markup words matched:
  * a graph that sparse is noise, and the caller falls back to paced reveal.
  */
+export interface DrawStep {
+  id: string;
+  cmd: string;
+  label: string;
+}
+
+/**
+ * Cue each stroke of a hand-drawn figure to the narration. Steps that write a
+ * label ("Nucleus") are matched to where that word is spoken; unlabeled
+ * strokes (the circle it sits in, the orbits) inherit the next labeled
+ * step's cue, because a teacher draws the shape as they name it. Steps before
+ * the first match, or all of them when nothing matches, return null — the
+ * caller then falls back to a paced replay.
+ */
+export function alignStepsToSpeech(
+  steps: DrawStep[],
+  speech: SpeechRef[],
+): Array<WordCue | null> {
+  const spoken = tokenizeSpeech(speech);
+  const cues: Array<WordCue | null> = steps.map(() => null);
+  if (!spoken.length) return cues;
+
+  let cursor = 0;
+  for (let i = 0; i < steps.length; i++) {
+    const sounds = verbalizeWord(steps[i]!.label ?? "");
+    if (!sounds.length) continue;
+    let matchOrd = -1;
+    for (let o = cursor; o < spoken.length; o++) {
+      if (tokenMatches(spoken[o]!.norm, sounds[0]!)) {
+        matchOrd = o;
+        break;
+      }
+    }
+    if (matchOrd < 0) continue;
+    const tok = spoken[matchOrd]!;
+    cues[i] = { word: i, eventIndex: tok.eventIndex, charIndex: tok.charIndex };
+    cursor = matchOrd + 1;
+  }
+
+  // A labeled stroke is drawn right AFTER the shape it names, so pull the cue
+  // backwards over the unlabeled strokes that lead into it.
+  for (let i = cues.length - 1; i > 0; i--) {
+    if (cues[i] && !cues[i - 1]) cues[i - 1] = cues[i];
+  }
+  return cues;
+}
+
 export function alignWriteToSpeech(markup: string, speech: SpeechRef[]): WordCue[] {
   const spoken = tokenizeSpeech(speech);
   if (!spoken.length) return [];

@@ -24,6 +24,9 @@ export interface BoardEntry {
   // Word graph edges for write actions: written word index → where the voice
   // says it. HandWrite reveals each cued word as the voice clock passes it.
   wordCues?: WordCue[];
+  // This beat's narration, for figures whose stroke cues can only be built
+  // after the sidecar reports the primitives it drew.
+  beatSpeech?: Array<{ eventIndex: number; text: string }>;
 }
 
 // Board content on the infinite canvas (TeachStage supplies paper/pan/zoom/
@@ -151,6 +154,7 @@ function BoardItem({ entry }: { entry: BoardEntry }) {
           itemKey={live ? key : undefined}
           instant={!live}
           wordCues={live ? entry.wordCues : undefined}
+          beatSpeech={live ? entry.beatSpeech : undefined}
         />
       );
     case "code":

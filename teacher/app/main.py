@@ -13,7 +13,10 @@ import httpx
 from fastapi import FastAPI
 
 from app.config import settings
+from fastapi.staticfiles import StaticFiles
+
 from app.knowledge.db import create_schema
+from app.performance.clips import CLIP_DIR
 from app.knowledge.routes import router as knowledge_router
 from app.agents.routes import router as agents_router
 from app.performance.routes import router as performance_router
@@ -22,6 +25,12 @@ app = FastAPI(title="AI Teacher", version="0.1.0")
 app.include_router(knowledge_router)
 app.include_router(performance_router)
 app.include_router(agents_router)
+
+# Rendered clips are files, so they are served as files rather than base64 in
+# a JSON body. The browser reaches them through the web app's proxy, never
+# directly — on an iPad over Tailscale, 127.0.0.1 is the iPad.
+CLIP_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/clips", StaticFiles(directory=str(CLIP_DIR)), name="clips")
 
 
 @app.on_event("startup")
