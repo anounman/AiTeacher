@@ -55,6 +55,20 @@ export const teachActionSchema = z.discriminatedUnion("type", [
   // `graph` is deliberately opaque here. Its shape is the engine's
   // PositionedGraph and validating a copy of it in this file would be a
   // second schema to keep in step with an upstream we do not own.
+  // An animated clip: a process changing over time, rendered by Manim from a
+  // template (teacher/app/performance/clips.py). The model names a template
+  // and its parameters — never code, never coordinates — and the deterministic
+  // builder on the other side constructs the scene.
+  z.object({
+    type: z.literal("clip"),
+    kind: z.enum(["function_tangent", "function_area"]),
+    expression: z.string().max(200),
+    at: z.number().optional(),
+    x_min: z.number().optional(),
+    x_max: z.number().optional(),
+    label: z.string().max(120).optional(),
+    id: z.string().optional(),
+  }),
   z.object({
     type: z.literal("concept_graph"),
     graph: z.unknown(),

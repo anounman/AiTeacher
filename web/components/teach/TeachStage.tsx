@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Board, type BoardEntry } from "./Board";
+import { clipUrl } from "./ClipScene";
 import { loadEngine } from "@/lib/teach/handwriting";
 import { prefetchStrokeText } from "./StrokeText";
 import { prefetchWrite, writeReady } from "./HandWrite";
@@ -65,7 +66,7 @@ function actionTimeoutMs(action: TeachAction): number {
   }
 }
 
-const AWAITED = new Set(["latex", "text", "heading", "mark", "code", "write"]);
+const AWAITED = new Set(["latex", "text", "heading", "mark", "code", "write", "clip"]);
 const VOICED_SETTLE_MS = 1_100;
 // A cue never waits on a voice that has made NO progress for this long.
 // Speech synthesis can stall, a browser can throttle a background tab, and a
@@ -114,6 +115,17 @@ function requestVisualDirection(messageId: string, lessonMd: string): Promise<Di
   // rewritten if it came out broken. Fire-and-forget — it rewrites the stored
   // lesson so a reload shows the repaired board, and never touches the
   // performance the student is currently watching.
+  // Clips are content-addressed and take ~1s to render cold. Kicking them off
+  // now — while the lesson is still being read out from the top — means the
+  // pen reaches them warm instead of waiting on Manim mid-sentence.
+  try {
+    for (const event of parseTeachEvents(lessonMd, true)) {
+      if (event.kind === "draw" && event.action.type === "clip") void clipUrl(event.action);
+    }
+  } catch {
+    /* prefetch is best-effort */
+  }
+
   void fetch("/api/teach/repair", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

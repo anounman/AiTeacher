@@ -11,6 +11,7 @@ import { CodeWriteOn } from "./CodeWriteOn";
 import { roleFor, HandWrite } from "./HandWrite";
 import { VisualScene } from "./VisualScene";
 import { ConceptGraphScene } from "./ConceptGraphScene";
+import { ClipScene } from "./ClipScene";
 import type { PositionedGraph } from "@/lib/visual-engine/index";
 
 export interface BoardEntry {
@@ -200,6 +201,8 @@ function BoardItem({ entry }: { entry: BoardEntry }) {
       );
     case "visual_scene":
       return <VisualScene plan={action.plan} instant={!live} />;
+    case "clip":
+      return <ClipScene action={action} itemKey={key} instant={!live} />;
     case "concept_graph":
       return (
         <ConceptGraphScene

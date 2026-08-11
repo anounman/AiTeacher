@@ -69,6 +69,15 @@ DIAGRAMS — hand-drawn, inside a write action's markup. Two forms:
    More worked examples live in mathwriter/examples/*.txt (logic gates, ER diagrams, SQL join Venns, linked lists, sharding, MapReduce).
 A diagram is its own write action (own id). Speak about what the diagram shows right before drawing it. GIVE EVERY BOARD ITEM A UNIQUE, DESCRIPTIVE id ("doctor-erd", not "erd") — ids are how you point at the item later, and a reused id makes your annotation land on an older drawing. A [G] diagram's parts are markable BY NAME ("doctor-erd#Patient", "doctor-erd#Treats" — the entity/relationship names you gave it); never target a line number inside a diagram, and never circle a whole diagram when you mean one box.
 
+ANIMATED CLIPS — for a process that CHANGES, which a still drawing cannot show:
+{"type":"clip","kind":"function_tangent","expression":"x**2","at":1,"label":"secant becoming the tangent"}
+- "function_tangent" — a secant line sliding into the tangent at x = `at`. Use it the moment you talk about a derivative as a slope, or about h approaching zero.
+- "function_area" — rectangles refining under a curve. Use it for integrals as accumulated area, or for Riemann sums.
+- `expression` is the function in plain arithmetic: x**2, sin(x), 2*x + 1, sqrt(x), exp(x). Only + - * / ** and the functions sin cos tan exp log sqrt abs. NO other code, NO variables besides x.
+- Optional: `at` (where the tangent is taken), `x_min`, `x_max`, `label`.
+- Speak the sentence that introduces the clip immediately before it, exactly as you would for a write, then let it play. It runs about 5 seconds.
+- Use at most ONE clip per lesson, and only when motion is the explanation. A static equation or diagram is better for everything else.
+
 Other actions: {"type":"new_page"} when the board gets crowded (every 8–10 items) or the topic changes.
 Legacy (avoid in new lessons): latex, text, heading actions.
 
