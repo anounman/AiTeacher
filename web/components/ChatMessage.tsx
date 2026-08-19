@@ -50,6 +50,13 @@ interface Props {
   // "drafting-document" | "searching" | "writing"). Rendered as a thin mono
   // status line above the bubble while truthy.
   status?: string;
+  // Optional human-readable label the server sends with a status event, used
+  // INSTEAD of the static phase→label map so the server can show dynamic,
+  // data-driven steps ("found 3 relevant passages…").
+  statusLabel?: string;
+  // True for ephemeral overlay messages — disables selection markers and
+  // artifact versioning (overlay threads aren't the main chat).
+  ephemeral?: boolean;
   // Model reasoning (thinking trace) streamed in. Rendered in a collapsible
   // <details> panel above the content, via <Markdown>.
   reasoning?: string;
@@ -82,6 +89,8 @@ export function ChatMessage({
   conversationTitle,
   conversationId,
   status,
+  statusLabel,
+  ephemeral = false,
   reasoning,
   allMaterials,
 }: Props) {
@@ -276,7 +285,7 @@ export function ChatMessage({
           {status && (
             <div className="mono mb-2 flex items-center gap-1.5 text-[10px] tracking-wide text-ink-3">
               <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-feynman" />
-              {STATUS_LABELS[status] ?? status}
+              {statusLabel ?? STATUS_LABELS[status] ?? status}
             </div>
           )}
           {reasoning && (
@@ -339,7 +348,7 @@ export function ChatMessage({
         {status && (
           <div className="mono mb-2 flex items-center gap-1.5 text-[10px] tracking-wide text-ink-3">
             <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-feynman" />
-            {STATUS_LABELS[status] ?? status}
+            {statusLabel ?? STATUS_LABELS[status] ?? status}
           </div>
         )}
         {reasoning && (

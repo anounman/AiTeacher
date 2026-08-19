@@ -1,8 +1,12 @@
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { SCHEMA_SQL, type Conversation, type Message, type ConversationMode, type MessageKind, type Attachment, type TeacherPersonaPreset } from "./schema";
+import { SCHEMA_SQL, type Conversation, type Message, type ConversationMode, type MessageKind, type MessageDeliveryState, type Attachment, type TeacherPersonaPreset } from "./schema";
+import { runMigrations } from "./migrations";
 import { estimateTokens } from "@/lib/tokens";
+import { prefixThroughAssistantMessage } from "@/lib/chat/message-prefix";
+import { rankConversationSearch, type ConversationSearchResult } from "@/lib/chat/conversation-search";
+import { rankGlobalSearch, type GlobalSearchResult } from "@/lib/chat/global-search";
 
 // Keep one connection across hot-reloads in dev so we don't lock the file.
 const globalForDb = globalThis as unknown as { __studygptDb?: Database.Database };
@@ -19,6 +23,10 @@ function open(): Database.Database {
   if (!inMemory) db.pragma("journal_mode = WAL"); // WAL requires a file-backed db
   db.pragma("foreign_keys = ON");
   for (const stmt of SCHEMA_SQL) db.exec(stmt);
+  // Versioned additive migrations + back-fills. Each runs at most once per DB
+  // and is recorded in schema_version. The inline guards below remain for
+  // existing DBs that predate the migration system.
+  runMigrations(db);
   // Additive migration: add conversations.project_id if missing (existing DBs).
   const cols = db.prepare("PRAGMA table_info(conversations)").all() as { name: string }[];
   if (!cols.some((c) => c.name === "project_id")) {
@@ -333,6 +341,103 @@ export function getAllSettings(): Record<string, string> {
   return Object.fromEntries(rows.map((r) => [r.key, r.value]));
 }
 
+// --- Search ---
+
+export function searchConversationHistory(query: string): ConversationSearchResult[] {
+  const term = query.trim();
+  if (!term) return [];
+  const conversations = db.prepare("SELECT id, title FROM conversations ORDER BY created_at DESC").all() as {
+    id: string;
+    title: string;
+  }[];
+  const messages = db.prepare(
+    "SELECT id, conversation_id, role, content FROM messages WHERE role IN ('user', 'assistant') ORDER BY created_at DESC, rowid DESC",
+  ).all() as { id: string; conversation_id: string; role: "user" | "assistant"; content: string }[];
+  return rankConversationSearch(
+    conversations,
+    messages.map((message) => ({
+      id: message.id,
+      conversationId: message.conversation_id,
+      role: message.role,
+      content: message.content,
+    })),
+    term,
+  ).slice(0, 20);
+}
+
+export function searchGlobalHistory(query: string, activeProjectId: string | null): GlobalSearchResult[] {
+  const term = query.trim();
+  if (!term) return [];
+  const conversations = db.prepare("SELECT id, title, project_id FROM conversations ORDER BY created_at DESC").all() as {
+    id: string;
+    title: string;
+    project_id: string | null;
+  }[];
+  const messages = db.prepare(
+    "SELECT id, conversation_id, role, content, kind FROM messages WHERE role IN ('user', 'assistant') ORDER BY created_at DESC, rowid DESC",
+  ).all() as { id: string; conversation_id: string; role: "user" | "assistant"; content: string; kind: MessageKind }[];
+  const materials = db.prepare("SELECT id, project_id, title, text FROM materials ORDER BY created_at DESC").all() as {
+    id: string;
+    project_id: string;
+    title: string;
+    text: string;
+  }[];
+  const concepts = db.prepare("SELECT id, project_id, label, description FROM concepts ORDER BY label ASC").all() as {
+    id: string;
+    project_id: string;
+    label: string;
+    description: string | null;
+  }[];
+  const overlays = db.prepare("SELECT id, conversation_id, selected_text FROM overlay_threads ORDER BY updated_at DESC, rowid DESC").all() as {
+    id: string;
+    conversation_id: string;
+    selected_text: string;
+  }[];
+
+  return rankGlobalSearch({
+    query: term,
+    activeProjectId,
+    conversations: conversations.map((conversation) => ({
+      id: conversation.id,
+      title: conversation.title,
+      projectId: conversation.project_id,
+    })),
+    messages: messages.map((message) => ({
+      id: message.id,
+      conversationId: message.conversation_id,
+      role: message.role,
+      content: message.content,
+      kind: message.kind,
+    })),
+    materials: materials.map((material) => ({
+      id: material.id,
+      projectId: material.project_id,
+      title: material.title,
+      text: material.text,
+    })),
+    concepts: concepts.map((concept) => ({
+      id: concept.id,
+      projectId: concept.project_id,
+      label: concept.label,
+      description: concept.description,
+    })),
+    overlays: overlays.map((overlay) => ({
+      id: overlay.id,
+      conversationId: overlay.conversation_id,
+      selectedText: overlay.selected_text,
+    })),
+  });
+}
+
+// --- Overlay support ---
+
+export function listConversationMessagesThrough(
+  conversationId: string,
+  sourceMessageId: string,
+): Message[] | null {
+  return prefixThroughAssistantMessage(listMessages(conversationId), sourceMessageId);
+}
+
 export * from "./projects";
 export * from "./materials";
 export * from "./sources";
@@ -340,4 +445,9 @@ export * from "./decks";
 export * from "./reviews";
 export * from "./concepts";
 export * from "./mastery";
-export type { Project, Material, Chunk, SourceEntry, MaterialStatus, MaterialSourceType, TeacherPersonaPreset, Attachment, Message, MessageKind, Deck, Card, CardScheduling, ReviewLog, Concept, ConceptEdge, ConceptSource, CardConcept, MaterialExtraction, MaterialExtractionStatus, EdgeConfidence, ConceptRelation } from "./schema";
+export * from "./notation";
+export * from "./overlays";
+export * from "./insights";
+export * from "./project-memory";
+export * from "./artifact-versions";
+export type { Project, ProjectMemoryEntry, Material, Chunk, SourceEntry, MaterialStatus, MaterialSourceType, TeacherPersonaPreset, Attachment, Message, MessageKind, MessageDeliveryState, MessageActivity, MessageGrounding, Deck, Card, CardScheduling, ReviewLog, Concept, ConceptEdge, ConceptSource, CardConcept, MaterialExtraction, MaterialExtractionStatus, EdgeConfidence, ConceptRelation, OverlayThread, OverlayMessage, ArtifactVersion, CreateArtifactVersionInput } from "./schema";

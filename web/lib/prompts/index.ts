@@ -1,4 +1,5 @@
 import type { ConversationMode } from "@/lib/db/schema";
+import { artifactKindListPrompt } from "@/lib/artifacts/schema";
 import { CHAT_SYSTEM_PROMPT } from "./chat";
 import { FEYNMAN_SYSTEM_PROMPT } from "./feynman";
 import { TEACH_SYSTEM_PROMPT } from "./teach";
@@ -28,16 +29,33 @@ Formatting constraints for mathematical output (MUST follow):
   Then continue the explanation.`;
 
 // When the user asks to visualize / render / draw / plot / diagram / build
-// something visual or interactive, the model emits a single ```artifact fenced
-// block containing a complete, self-contained HTML document; the chat renders
-// it inline in a sandboxed iframe (see components/Artifact.tsx). Appended to
-// every mode's prompt so the capability is available everywhere.
+// something visual or interactive, the model emits a native JSON `artifact`
+// block. Exceptional interactions outside the native kinds use `artifact-html`.
+// Appended to every mode's prompt so the capability is available everywhere.
+// The kind list is derived from the artifact registry so it can never drift
+// from the validators (lib/artifacts/registry.ts → kinds/*).
 export const ARTIFACT_RULES = `
 Inline visualization artifacts:
-- When the user asks you to visualize, render, draw, plot, diagram, animate, or build something visual or interactive, emit a SINGLE fenced code block with the language \`artifact\` containing a COMPLETE, self-contained HTML document that renders it in a browser.
-- The artifact renders in a sandboxed iframe. Use inline <style> and <script>. You MAY load libraries from a CDN with <script src="https://..."> (e.g. Chart.js, Plotly, D3, Mermaid, KaTeX, Three.js). It cannot access the parent page, so be fully self-contained: inline your data as JS.
-- Make it work standalone: full HTML structure, sensible responsive width, a reasonable height, and your data inline. For charts use Chart.js or Plotly; for diagrams use Mermaid or D3 or hand-drawn SVG; for math use KaTeX from CDN.
-- Emit an \`artifact\` block ONLY when the user explicitly wants a visual/interactive output. For ordinary code answers, use normal fenced code blocks with the real language. You may add a short prose explanation before the artifact, but the artifact block itself must contain ONLY the HTML.`;
+- When the user explicitly wants a visual or interactive output, emit a SINGLE \`artifact\` fenced block containing JSON only. Do not put Markdown, prose, or JSON fences inside that block.
+- Every \`artifact\` JSON envelope MUST use this discriminator: \`"schema":"studygpt.artifact"\` and \`"version":1\`. Example:
+
+  \`\`\`artifact
+  {"schema":"studygpt.artifact","version":1,"kind":"callout","title":"Key idea","data":{"body":"Selection reduces relation size.","tone":"idea"}}
+  \`\`\`
+
+- Pick exactly one supported kind and its matching data shape: ${artifactKindListPrompt()}. A \`diagram\` contains Mermaid source; for simple structural diagrams, prefer a direct \`mermaid\` fence instead.
+- Use \`artifact-html\` only when the user requests interaction unavailable in the native kinds. It may contain custom HTML for the legacy sandbox.
+- Never emit full document chrome, style tags, scripts, HTML, SVG, URLs, or base64 data in an \`artifact\` JSON envelope.`;
+
+// Mermaid diagrams (ERM/ER, flowchart, sequence, class, state, gantt): the model
+// emits a SINGLE ```mermaid fenced block and the chat renders it INLINE as a
+// vector SVG. This is the preferred path for any static diagram. Appended to
+// every non-teach mode's prompt so diagrams "just work" everywhere.
+export const MERMAID_RULES = `
+Inline diagrams (use these for ANY diagram):
+- When the user asks for an entity-relationship (ERM/ER) model, a flowchart, a sequence diagram, a class diagram, a state diagram, or any other structural diagram, emit a SINGLE fenced code block with the language \`mermaid\`. It renders INLINE in the chat as a vector diagram — do NOT draw the diagram with ASCII art, do NOT describe it in prose, and do NOT wrap it in an HTML \`artifact\` block (that renders in a separate iframe, not inline).
+- Use the correct Mermaid diagram type for the job: \`erDiagram\` for entity-relationship models, \`flowchart\` for flowcharts, \`sequenceDiagram\` for interactions, \`classDiagram\` for class models, \`stateDiagram-v2\` for state machines.
+- You MAY add a short prose explanation before or after the diagram, but the diagram itself MUST be the \`mermaid\` block. Keep the block valid Mermaid — one diagram per block.`;
 
 // Flashcard decks: the user asks for "flashcards" / "quiz me" / "test me on X".
 // The model emits a SINGLE ```flashcard block in the Q:/A: line-marker format;
@@ -77,14 +95,30 @@ export function systemPromptFor(mode: ConversationMode): string {
   // prose, teach forbids math in prose entirely).
   if (mode === "teach") return TEACH_SYSTEM_PROMPT + WEB_SEARCH_RULES;
   const base = mode === "feynman" ? FEYNMAN_SYSTEM_PROMPT : CHAT_SYSTEM_PROMPT;
-  return base + MATH_FORMATTING_RULES + ARTIFACT_RULES + FLASHCARD_RULES + WEB_SEARCH_RULES;
+  return base + MATH_FORMATTING_RULES + MERMAID_RULES + ARTIFACT_RULES + FLASHCARD_RULES + WEB_SEARCH_RULES;
 }
 
 // System prompt for a one-shot document turn (the "Document" send action).
-// Mirrors systemPromptFor(): document base + the shared math rules + artifact
-// rules + flashcard rules. The retrieval contextBlock is appended by the chat
-// route, just as it is for the chat/feynman modes — so a document in a project
-// conversation stays grounded in the project's reference materials.
+// Unlike systemPromptFor(), a document turn does NOT get ARTIFACT_RULES or
+// FLASHCARD_RULES: those tell the model to emit `artifact` / `flashcard`
+// fenced blocks, which render as interactive on-screen widgets (a sandboxed
+// iframe or a flip deck) that do NOT print to PDF. A document turn is exported
+// to PDF, so it must author printable Markdown only (the document prompt says
+// so explicitly, and `mermaid` is allowed for diagrams). The retrieval
+// contextBlock is appended by the chat route.
 export function documentSystemPrompt(): string {
-  return DOCUMENT_SYSTEM_PROMPT + MATH_FORMATTING_RULES + ARTIFACT_RULES + FLASHCARD_RULES + WEB_SEARCH_RULES;
+  return DOCUMENT_SYSTEM_PROMPT + MATH_FORMATTING_RULES + MERMAID_RULES + WEB_SEARCH_RULES;
 }
+
+// System prompt for a one-shot native-artifact transform. Unlike
+// systemPromptFor(), it carries NO math/mermaid/flashcard/web rules: the
+// model's ONLY job is to return a single transformed `artifact` JSON envelope.
+// The route requires exactly one ```artifact fence and validates it through
+// classifyArtifact before persisting.
+export const ARTIFACT_TRANSFORM_PROMPT = `
+You transform an existing StudyGPT native artifact according to the user's instruction.
+- Return ONLY a single fenced \`artifact\` block containing JSON. No prose, no other fences.
+- The JSON MUST keep the discriminator \`"schema":"studygpt.artifact"\` and \`"version":1\`, and keep the same \`kind\` unless the instruction explicitly asks to change it.
+- Preserve the artifact's meaning and grounding; apply only the requested edit (simplify, add an example, turn into flashcards, rephrase, etc.).
+- Never emit HTML, scripts, SVG, URLs, or base64. Stay within the supported kinds: ${artifactKindListPrompt()}.
+- If relevant project context is provided, keep the transformed artifact consistent with it.`;

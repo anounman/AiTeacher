@@ -6,6 +6,7 @@
 // so it's idempotent and safe to extend.
 
 import type { Band } from "@/lib/mastery/model";
+import type { NativeArtifact } from "@/lib/artifacts/schema";
 
 export const SCHEMA_SQL = [
   `CREATE TABLE IF NOT EXISTS conversations (
@@ -35,6 +36,7 @@ export const SCHEMA_SQL = [
   `CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    study_enabled INTEGER NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS materials (
@@ -225,6 +227,71 @@ export const SCHEMA_SQL = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_card_concepts_card ON card_concepts(card_id)`,
   `CREATE INDEX IF NOT EXISTS idx_card_concepts_concept ON card_concepts(concept_id)`,
+  // --- Diagram notation cache (vision pipeline) ---
+  `CREATE TABLE IF NOT EXISTS diagram_notation (
+    project_id TEXT NOT NULL,
+    diagram_type TEXT NOT NULL,
+    notation_note TEXT NOT NULL,
+    material_ids TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY(project_id, diagram_type),
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  )`,
+  // --- Contextual chat overlays ---
+  `CREATE TABLE IF NOT EXISTS overlay_threads (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    source_message_id TEXT NOT NULL,
+    selected_text TEXT NOT NULL,
+    text_offset INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+    FOREIGN KEY (source_message_id) REFERENCES messages(id) ON DELETE CASCADE
+  )`,
+  `CREATE TABLE IF NOT EXISTS overlay_messages (
+    id TEXT PRIMARY KEY,
+    overlay_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    reasoning TEXT,
+    sources TEXT NOT NULL DEFAULT '[]',
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (overlay_id) REFERENCES overlay_threads(id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_overlay_messages_thread ON overlay_messages(overlay_id, created_at)`,
+  // --- Project memory (persistent notes per project) ---
+  `CREATE TABLE IF NOT EXISTS project_memory (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  )`,
+  // --- Message grounding (which sources/materials a message used) ---
+  `CREATE TABLE IF NOT EXISTS message_grounding (
+    message_id TEXT PRIMARY KEY,
+    material_ids TEXT NOT NULL DEFAULT '[]',
+    source_count INTEGER NOT NULL DEFAULT 0,
+    used_web INTEGER NOT NULL DEFAULT 0,
+    used_notation INTEGER NOT NULL DEFAULT 0,
+    model TEXT,
+    created_at INTEGER NOT NULL
+  )`,
+  // --- Artifact versioning (edited/transformed native artifacts) ---
+  `CREATE TABLE IF NOT EXISTS artifact_versions (
+    id TEXT PRIMARY KEY,
+    artifact_id TEXT NOT NULL,
+    parent_version_id TEXT,
+    source_message_id TEXT,
+    payload TEXT NOT NULL,
+    instruction TEXT,
+    active INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_artifact_versions_artifact ON artifact_versions(artifact_id, created_at)`,
 ] as const;
 
 export type ConversationMode = "chat" | "feynman" | "teach";
@@ -273,7 +340,17 @@ export type TeacherPersonaPreset =
 export interface Project {
   id: string;
   name: string;
+  study_enabled: boolean;
   created_at: number;
+}
+
+export interface ProjectMemoryEntry {
+  id: string;
+  project_id: string;
+  content: string;
+  active: boolean;
+  created_at: number;
+  updated_at: number;
 }
 
 // A saved flashcard deck. `conversation_id` is the chat it came from (nullable;
@@ -345,15 +422,76 @@ export interface Chunk {
 }
 
 export interface SourceEntry {
-  sourceId: string;
-  chunkId: string;
+  sourceId?: string;
+  chunkId?: string;
   materialId: string;
   title: string;
   snippet: string;
   ordinal: number;
-  page?: number;
+  page?: number | null;
   concepts?: { label: string; band: Band }[];
 }
+
+// --- Message metadata (activities, grounding) ---
+
+export type MessageDeliveryState = "complete" | "interrupted";
+
+export interface MessageActivity {
+  phase: string;
+  label: string;
+  ordinal: number;
+}
+
+export interface MessageGrounding {
+  materialIds: string[];
+  sourceCount: number;
+  usedNotation: boolean;
+  usedWeb: boolean;
+  model: string | null;
+}
+
+// --- Contextual chat overlays ---
+
+export interface OverlayThread {
+  id: string;
+  conversation_id: string;
+  source_message_id: string;
+  selected_text: string;
+  text_offset: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface OverlayMessage {
+  id: string;
+  overlay_id: string;
+  role: "user" | "assistant";
+  content: string;
+  reasoning: string | null;
+  sources: SourceEntry[];
+  created_at: number;
+}
+
+// --- Artifact versioning ---
+
+export interface ArtifactVersion {
+  id: string;
+  artifact_id: string;
+  parent_version_id: string | null;
+  source_message_id: string;
+  payload: NativeArtifact;
+  instruction: string | null;
+  active: boolean;
+  created_at: number;
+}
+
+export type CreateArtifactVersionInput = {
+  artifactId: string;
+  parentVersionId?: string | null;
+  sourceMessageId?: string | null;
+  payload: NativeArtifact;
+  instruction?: string | null;
+};
 
 // --- Phase 3 (SP1): concept graph types ---
 

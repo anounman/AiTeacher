@@ -2,19 +2,25 @@ import { db } from "./index";
 import type { Project } from "./schema";
 
 export function listProjects(): Project[] {
-  return db.prepare("SELECT * FROM projects ORDER BY created_at DESC").all() as Project[];
+  const rows = db.prepare("SELECT * FROM projects ORDER BY created_at DESC").all() as Record<string, unknown>[];
+  return rows.map((p) => ({ ...p, study_enabled: !!p.study_enabled })) as Project[];
 }
 
 export function getProject(id: string): Project | undefined {
-  return db.prepare("SELECT * FROM projects WHERE id = ?").get(id) as Project | undefined;
+  const row = db.prepare("SELECT * FROM projects WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+  return row ? ({ ...row, study_enabled: !!row.study_enabled } as Project) : undefined;
 }
 
-export function createProject(name: string): Project {
-  const row: Project = { id: crypto.randomUUID(), name, created_at: Date.now() };
-  db.prepare("INSERT INTO projects (id, name, created_at) VALUES (?, ?, ?)").run(
-    row.id, row.name, row.created_at,
+export function createProject(name: string, studyEnabled = true): Project {
+  const row: Project = { id: crypto.randomUUID(), name, study_enabled: studyEnabled, created_at: Date.now() };
+  db.prepare("INSERT INTO projects (id, name, study_enabled, created_at) VALUES (?, ?, ?, ?)").run(
+    row.id, row.name, row.study_enabled ? 1 : 0, row.created_at,
   );
   return row;
+}
+
+export function setProjectStudyEnabled(id: string, enabled: boolean): void {
+  db.prepare("UPDATE projects SET study_enabled = ? WHERE id = ?").run(enabled ? 1 : 0, id);
 }
 
 export function renameProject(id: string, name: string): void {
