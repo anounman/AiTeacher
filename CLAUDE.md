@@ -2,6 +2,170 @@
 
 AI teacher that teaches by writing/drawing on a canvas (GoodNotes-style), grounded in the user's own study resources. Zero tolerance for uncited claims.
 
+---
+
+# ⚠ CURRENT FOCUS — read this before anything else
+
+**Temporary orientation block (added 2026-08-19).** Where it contradicts the
+rest of this file, it wins: everything below it describes the whole product,
+this describes what is actually being built right now. Delete it once the
+writer question below is settled.
+
+## Who is building what
+
+Two people, split by engine rather than by feature:
+
+- **Jayansh** (`github.com/JayanshJ`) owns the **writing and drawing engines**:
+  mathwriter (`JayanshJ/mathwriter`, vendored at `mathwriter/`, Python sidecar)
+  and the visual engine (`JayanshJ/study-visual-engine`, vendored *verbatim* at
+  `web/lib/visual-engine/`). **Do not hand-edit `web/lib/visual-engine/`** — it
+  is a copy, re-synced by `npm run sync:visual-engine`; see its `package.json`
+  note. Fixes to those engines go upstream, not into this repo.
+- **Ankush** (this repo, `anounman/AiTeacher`) owns **AI Teacher**: the board,
+  the lesson loop, the pen loop, and every consumer of those engines.
+- [ARCHITECTURE_V2.md](ARCHITECTURE_V2.md) §5 is the versioned HTTP contract
+  between the two halves, so neither side blocks the other.
+
+## The only thing being worked on right now
+
+**The AI-teacher visualization loop.** Nothing else. End to end:
+
+> teacher writes on the board and speaks it aloud → teacher writes a question
+> on the board and asks it directly → student answers **on the board** with the
+> Apple Pencil → the ink is read back → the teacher judges the answer and
+> carries on.
+
+Where that lives: `web/components/teach/TeachStage.tsx` (board + gestures +
+"check my work"), `web/lib/teach/` (canvas, timeline, performer, protocol,
+ink-capture, voice-clock), `web/app/api/teach/*`, `prompts/teach.md`,
+`mathwriter/`, `web/lib/visual-engine/`, `teacher/app/performance/`.
+
+**Out of scope right now** — built or not, leave alone unless asked: ingest /
+knowledge plane, grounding + citations, evals, Conscious co-watch, chat,
+flashcards / FSRS / mastery.
+
+## The board's three visual tracks
+
+One board, three engines. Knowing which owns what is the single most useful
+fact in this codebase:
+
+| Track | Engine | Lives in | Status |
+|---|---|---|---|
+| **Handwriting** (prose, equations, tables) | mathwriter — harvested real glyphs, PNG raster | `mathwriter/`, `web/components/teach/HandWrite.tsx` | default, incumbent |
+| **Static diagrams** (trees, stacks, state machines, pipelines) | visual engine — model names a *concept in words*, deterministic TS layout + roughjs render | `web/lib/visual-engine/`, `web/app/api/teach/diagram/` | default on (`VISUAL_ENGINE !== "0"`) |
+| **Animated clips** (a process that *changes*) | Manim, template-driven | `teacher/app/performance/clips.py`, `web/components/teach/ClipScene.tsx` | on, capped at 1 per lesson |
+
+Rules that hold across all three:
+
+- **The model never emits coordinates.** It names a concept (`diagram`) or a
+  template plus parameters (`clip`); layout is deterministic code. `[G]` and
+  `[DRAW]` markup are *forbidden by name* in `prompts/teach.md` — that is what
+  killed the overlapping labels and crude hand-placed axes. `[T]` tables stay,
+  because a table is handwriting.
+- **The model never writes code.** Not Manim, not Python, not TeX beyond a
+  formula body — `check_tex()` in `clips.py` rejects `\input`, `\def`,
+  `\write`, `\catcode` and friends; `safe_expr.py` whitelists expressions.
+- **No track may gate the lesson.** Speech is the master clock. A failed write
+  renders as text, a refused layout degrades to the spoken explanation, a clip
+  that will not render disappears. Nothing deadlocks on the pen.
+
+## The writer bake-off — Manim vs p5.js vs mathwriter (OPEN)
+
+The question we set out to answer: **can Manim or p5.js replace the writing
+engine entirely?** Built so it could be answered by looking, not by arguing.
+Commit `8bb573c`.
+
+**Verdict: not yet reached.** Nobody has looked at `/writer-lab` on the iPad.
+That judgement is the next action on this workstream.
+
+**Manim — works, but cannot cover the board.**
+Two clip kinds carry it: `write_math` (real `MathTex` drawn stroke-by-stroke by
+`Write()`) and `write_text` (headings/prose). Getting there was toolchain, not
+code: brew's `dvisvgm` looks for kpathsea data under its own Cellar prefix and
+finds nothing, costing ~5s of brute-force font processing per formula and
+making every PS special fatal. `teacher/bin/dvisvgm` shims in `TEXMFCNF`
+(pointing at brew texlive) and `--no-specials` — 5s became 3ms. A new formula
+renders in 0.5–2s and is cached forever by spec hash.
+Its limits, by construction: it is **typeset, not handwritten** (trades the
+board's whole look for correctness), and `web/lib/teach/markup-to-tex.ts`
+deliberately returns `null` — falling back to mathwriter — for tables,
+multi-line items, `[G]/[DRAW]/[T]/[X]/[V]/[H]`, unbalanced tags, and any
+unmapped non-ASCII. **A wrong formula drawn beautifully is the worst outcome on
+a teaching board**, so the converter stays conservative; widen it only with a
+test per case.
+
+**p5.js — an honest spike, not adopted.**
+`web/components/visual/P5Write.tsx`. Its one genuine advantage over a rendered
+clip: writing **speed is adjustable live**, so it could chase the voice clock
+frame by frame; a video's pace is fixed at render time. Its ceiling is equally
+plain: no typesetting at all. A fraction would mean rebuilding exactly the
+layout engine this experiment exists to retire. Keep it as the reference for
+the live-speed idea; do not put math on it.
+
+**How to test it** (this is the whole point of the experiment):
+
+1. `/writer-lab` renders four samples — quadratic formula, heading, sum, prose
+   note — through **all three writers side by side, with timings**.
+2. The toggle at the bottom of that page flips **real lessons** to the Manim
+   writer: `localStorage["aiteacher.writer"] = "manim"` (default
+   `"mathwriter"`). Per device, no redeploy — so it can be flipped on the iPad
+   mid-session.
+3. Anything Manim cannot express, and any render failure, falls back to
+   mathwriter silently. So a bad toggle degrades, it does not break.
+4. Manim clips need the teacher service running (`npm run teacher`) plus a
+   LaTeX install; mathwriter needs `npm run writer`.
+
+**Why we went looking in the first place** — measured mathwriter defects, all
+still open. See [`mathwriter/ENGINE_PLAN.md`](mathwriter/ENGINE_PLAN.md) §2:
+
+- **D1 silent math corruption.** `±` has no glyph and falls back to `+`
+  (`mathwriter/charset.py`), so the quadratic formula renders *wrong*. Same for
+  `×`, `·`, `%`, and every Greek capital.
+- **D2 nondeterminism.** `render.py` still calls unseeded `random.*`; the same
+  markup renders 12% wider on a second call. No content-addressed cache and no
+  visual regression test are possible until this is fixed.
+- **D4 resolution.** Vector path is ~80% done server-side (`svg_canvas.py`,
+  `/glyphs`, `format:"svg"`) and **0% client-side** — `HandWrite.tsx` still
+  fetches PNG and still alpha-scans the raster to recover line bands.
+
+The fork, when the bake-off is judged: fix mathwriter's W0+W1 (seed the RNG,
+draw the missing symbols, add goldens — keeps the handwritten look), or commit
+to Manim for math and accept typeset output, or hold both behind the toggle.
+
+## The pen-answer half of the loop
+
+Built and verified once live (TODO 2c.26): pen strokes rasterized
+(`web/lib/teach/ink-capture.ts`) → `POST /api/teach/read-ink` → the `read`
+slot's cloud vision model transcribes them → the transcription is folded into a
+normal teach **interruption**, where the reason model — which holds the lesson —
+judges the answer. Triggered by "check my work" in the pen controls.
+
+Known gap: there is **no typed `exercise` action** yet (TODO 4.4). Today the
+teacher sets an exercise by prompt instruction only (`prompts/teach.md`) — it
+writes the question as an ordinary `write` action and says "write your answer on
+the board". So the board does not know an answer is expected, cannot wait for
+one, and cannot mark the region it belongs in. That is the next structural gap
+in this loop after the writer question.
+
+## Working in this repo
+
+Processes: `npm run dev` (Next.js in `web/`) + `npm run writer` (mathwriter
+sidecar) + `npm run teacher` (FastAPI — needed for Manim clips, the cue planner
+and render QA) + Ollama. `npm run db` for Postgres if touching the knowledge
+plane, which right now you are not.
+
+Tests for this workstream: `npm run test:teach` (67) and `npm run test:visual`
+(68) — both green as of 2026-08-19. `npm test` at the root runs everything but
+needs both Python venvs.
+
+⚠ **The rest of this file and [TODO.md](TODO.md) predate the `web/` + `teacher/`
+split** (ARCHITECTURE_V2 R0) and still say "SQLite" and give paths like
+`lib/teach/…` that are now `web/lib/teach/…`. Trust
+[ARCHITECTURE_V2.md](ARCHITECTURE_V2.md) §7 for live status and the paths in
+this block over anything stale below.
+
+---
+
 Read [ARCHITECTURE.md](ARCHITECTURE.md) before implementing anything — it locks stack, schemas, loops, and wire contracts. Tasks with acceptance criteria live in [TODO.md](TODO.md). Deviations require updating ARCHITECTURE.md in the same change.
 
 Built on StudyGPT (github.com/JayanshJ/chat, by Jayansh): Next.js 16 chat UI, ingest, retrieval, concept graph, FSRS flashcards, mastery. Board handwriting by mathwriter (github.com/JayanshJ/mathwriter, upgraded with the diagram engine from github.com/anounman/mathwriter-diagrams — `[G]`/`[DRAW]` hand-drawn diagrams; vendored at `mathwriter/` — Python sidecar, `npm run writer`). AiTeacher layers on: model slots, page provenance, teach mode (voice + handwriting on an infinite canvas), a visual director, a Hermes-style post-turn self-improvement loop (`lib/learner/profile.ts` — background reflection on the dispatch slot learns the student's style into a capped profile injected into every turn), and — still to build — enforced grounding claims, the eval harness, and Conscious co-watch. **Next.js 16 has breaking changes — read `node_modules/next/dist/docs/` before writing Next-specific code.**

@@ -10,9 +10,12 @@ student who did not write it.**
 
 ---
 
-## 1. Where we left off (2026-08-09/10, uncommitted)
+## 1. Where we left off (last checked 2026-08-19)
 
-A **vector migration, ~80% server-side, 0% client-side.**
+A **vector migration, ~80% server-side, 0% client-side** — unchanged since
+2026-08-10. **None of the W0–W5 phases below has been started**, so every
+defect in §2 is still live: `±` still renders as `+`, renders still vary 12% in
+width, and `HandWrite.tsx` still fetches PNG.
 
 | Piece | State |
 |---|---|
@@ -30,6 +33,31 @@ label fits inside its ellipse; `sequence` diagram type.
 
 Measured now, live: SVG render 65 ms / 11 KB for a 3-line lesson (63 glyph
 refs). Raster equivalent 63 ms / ~40 KB and blurry above 100% zoom.
+
+### 1b. The detour: can something else write instead? (2026-08-11/12, open)
+
+Rather than start W0, we asked whether the defects in §2 are worth fixing at
+all — i.e. whether **Manim or p5.js could replace this engine entirely**. Built
+as a side-by-side comparison so the answer comes from looking, not arguing
+(commit `8bb573c`, and see the CURRENT FOCUS block in `../CLAUDE.md`).
+
+- **Manim** now writes real typeset math (`MathTex` + `Write()`) as a clip:
+  `write_math` / `write_text` in `teacher/app/performance/clips.py`.
+  `web/lib/teach/markup-to-tex.ts` translates this engine's markup to LaTeX at
+  render time and **returns `null` — falling back here — for tables, multi-line
+  items, `[G]/[DRAW]/[T]/[X]/[V]/[H]`, and unmapped glyphs.** So Manim covers
+  single-line expressible formulas and nothing else, and what it draws is
+  typeset rather than handwritten.
+- **p5.js** was a spike only (`web/components/visual/P5Write.tsx`): no
+  typesetting, so no fractions. Its one real advantage is that writing speed is
+  adjustable *while* it writes, which a rendered clip cannot do.
+- Switch: `localStorage["aiteacher.writer"] = "manim"`, default `"mathwriter"`.
+  `/writer-lab` shows all three writers on the same four samples with timings.
+
+**Status: unjudged.** Nobody has looked at `/writer-lab` on the iPad yet. That
+verdict decides whether W0–W5 below get built or this engine becomes a fallback
+for what Manim cannot express. Until then, **this engine is still the default
+writer for every lesson**, defects and all.
 
 ---
 
