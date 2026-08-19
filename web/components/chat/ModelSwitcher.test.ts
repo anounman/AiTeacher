@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 
-const page = readFileSync(resolve(process.cwd(), "app/page.tsx"), "utf8");
+const page = readFileSync(resolve(process.cwd(), "app/(app)/page.tsx"), "utf8");
 const switcherPath = resolve(process.cwd(), "components/chat/ModelSwitcher.tsx");
 const switcher = existsSync(switcherPath) ? readFileSync(switcherPath, "utf8") : "";
 

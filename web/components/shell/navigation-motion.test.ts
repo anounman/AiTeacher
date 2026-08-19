@@ -6,7 +6,7 @@ import test from "node:test";
 const sidebar = readFileSync(resolve(process.cwd(), "components/shell/Sidebar.tsx"), "utf8");
 const bottomNav = readFileSync(resolve(process.cwd(), "components/shell/BottomTabBar.tsx"), "utf8");
 const conversations = readFileSync(resolve(process.cwd(), "components/shell/ConversationListPane.tsx"), "utf8");
-const chatPage = readFileSync(resolve(process.cwd(), "app/page.tsx"), "utf8");
+const chatPage = readFileSync(resolve(process.cwd(), "app/(app)/page.tsx"), "utf8");
 
 test("navigation carries the active marker between destinations", () => {
   assert.match(sidebar, /motion\.span/);
