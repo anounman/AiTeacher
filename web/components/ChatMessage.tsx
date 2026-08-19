@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { Markdown } from "./Markdown";
 import { SourcesPanel } from "./SourcesPanel";
 import { estimateTokens, userTurnText } from "@/lib/tokens";
-import type { SourceEntry, Attachment } from "@/lib/db/schema";
+import type { SourceEntry, Attachment, MessageActivity, MessageGrounding } from "@/lib/db/schema";
 
 // Shallow equality on the attachments an edit produced vs. the originals, so
 // we only persist (and re-run) when something actually changed. Compares by
@@ -57,6 +57,28 @@ interface Props {
   // True for ephemeral overlay messages — disables selection markers and
   // artifact versioning (overlay threads aren't the main chat).
   ephemeral?: boolean;
+  // Whether the message was fully delivered or interrupted (regenerate/edit).
+  deliveryState?: "complete" | "interrupted";
+  // Server-side activities (search/material/notation phases) + grounding info
+  // for the answer insights panel.
+  activities?: MessageActivity[];
+  grounding?: MessageGrounding | null;
+  // Overlay anchors (stored source-marker highlights) for this message.
+  overlayAnchors?: import("@/lib/chat/overlay-threads").OverlayAnchor[];
+  // Open an overlay anchored to a specific passage in this message.
+  onOpenOverlay?: (anchor: import("@/lib/chat/overlay-threads").OverlayAnchor) => void;
+  // Open the evidence dialog for a specific source.
+  onOpenSource?: (source: SourceEntry) => void;
+  // Study actions suggested for this message.
+  studyActions?: import("@/lib/chat/study-actions").StudyAction[];
+  // Fire a study action (opens overlay with the action's prompt).
+  onStudyAction?: (action: import("@/lib/chat/study-actions").StudyAction) => void;
+  // Artifact version overrides (edited/transformed native artifacts).
+  artifactVersionOverrides?: Record<string, import("@/components/artifacts/NativeArtifact").NativeArtifactVersionOverride>;
+  onArtifactVersionChange?: (entryId: string, result: { versionId: string; artifact: import("@/lib/artifacts/schema").NativeArtifact }) => void;
+  onArtifactVersionError?: (message: string) => void;
+  // The message id — needed for artifact versioning and selection markers.
+  messageId?: string;
   // Model reasoning (thinking trace) streamed in. Rendered in a collapsible
   // <details> panel above the content, via <Markdown>.
   reasoning?: string;
@@ -91,6 +113,18 @@ export function ChatMessage({
   status,
   statusLabel,
   ephemeral = false,
+  deliveryState = "complete",
+  activities,
+  grounding,
+  overlayAnchors = [],
+  onOpenOverlay,
+  onOpenSource,
+  studyActions,
+  onStudyAction,
+  artifactVersionOverrides,
+  onArtifactVersionChange,
+  onArtifactVersionError,
+  messageId,
   reasoning,
   allMaterials,
 }: Props) {

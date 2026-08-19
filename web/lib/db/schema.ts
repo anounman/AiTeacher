@@ -319,6 +319,7 @@ export interface Message {
   role: "user" | "assistant" | "system";
   content: string;
   kind: MessageKind;
+  delivery_state?: MessageDeliveryState;
   attachments: Attachment[] | null;
   // Rough token estimate (see lib/tokens). Stored so the global token count in
   // Settings is a single SUM, not a full table scan in the client. Null only
