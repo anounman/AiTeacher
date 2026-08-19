@@ -9,12 +9,19 @@
 
 export const CONCEPT_EXTRACTION_PROMPT = `You are a knowledge-graph extractor for study materials. From the given text chunk, extract the distinct concepts and the study-relevant relations between them. Return ONLY a JSON object with two arrays: "concepts" and "edges".
 
+GRANULARITY (read this carefully — it is the most important instruction)
+- A "concept" here is a BROAD, teachable topic or principle — the kind of thing that earns its own textbook section or lecture title. Think "what are the handful of big ideas this chunk is actually about?", not "what terms appear?".
+- One chunk should yield at most about 5 concepts, and often only 1–3. A whole textbook chapter has roughly 15–25 big ideas total; do not extract more from a single chunk than the chapter could hold.
+- DO NOT extract, as separate concepts: individual terms, definitions, formulas, equations, variables, symbols, named entities (people, places, products), examples, illustrations, step-by-step sub-procedures, or minor properties. These are DETAILS, not concepts.
+- Fold details into their parent concept instead of listing them separately. "Eigenvalue Equation", "characteristic polynomial example", and "eigenvector of a 2×2 matrix" are all details of "Eigenvalue" / "Characteristic Polynomial" — emit the broad topic, not the detail.
+- When unsure whether something is a broad concept or a detail, it is almost always a detail: omit it. Fewer, richer concepts beat many narrow ones.
+
 CONCEPTS
 - Use canonical concept labels: a singular noun phrase in Title Case, with no trailing punctuation. Examples: "Eigenvalue", "Gradient Descent", "Law of Large Numbers".
 - Merge near-synonyms into a single entry (e.g. prefer "Eigenvalue" once, not "Eigenvalue" + "eigenvalues" + "eigenvalue").
 - "description" is one concise, neutral sentence defining the concept as it's used in this text. No filler.
 - "evidence" is a short verbatim quote or phrase from the text that grounds the concept, if identifiable; omit it otherwise.
-- Extract the real concepts the text is about, not every noun or named entity. If the chunk has no teachable concepts, return empty arrays.
+- If the chunk has no broad teachable concepts, return empty arrays.
 
 EDGES
 - "source" and "target" must each EXACTLY match a label in this output's "concepts" array. source must never equal target.

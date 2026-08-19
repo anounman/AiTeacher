@@ -1,12 +1,22 @@
 "use client";
 
 import { useState, useRef, useEffect, type FormEvent, type KeyboardEvent, type ClipboardEvent } from "react";
-import type { Attachment } from "@/lib/db/schema";
 import {
-  audioUploadName,
-  microphoneErrorMessage,
-  preferredRecorderMimeType,
-} from "@/lib/voice/recording";
+  Plus,
+  Globe,
+  Mic,
+  Loader2,
+  Square,
+  ArrowUp,
+  X,
+  Check,
+  FolderPlus,
+  Paperclip,
+} from "lucide-react";
+import type { Attachment } from "@/lib/db/schema";
+import { Button } from "@/components/ui/Button";
+import { useVoiceTyping } from "@/components/chat/useVoiceTyping";
+import { cn } from "@/lib/cn";
 
 interface Props {
   onSend: (text: string, attachments: Attachment[], document: boolean, web: boolean) => void;
@@ -95,73 +105,13 @@ export function ChatInput({ onSend, disabled, placeholder, streaming, onStop, pr
   const [addedToProject, setAddedToProject] = useState<Set<string>>(new Set());
   const [addingToProject, setAddingToProject] = useState<string | null>(null);
   const [gateMsg, setGateMsg] = useState<string | null>(null);
-  const [listening, setListening] = useState(false);
-  // Armed for the next send → the message becomes a one-shot authored
-  // document (document-authoring prompt + kind='document' + a document card
-  // with a Print/Save-as-PDF action). Resets after sending so follow-ups are
-  // normal chat replies unless re-armed.
-  const [docMode, setDocMode] = useState(false);
   // Web-search toggle (default on). When armed, the server may attach the
   // web_search tool to the turn. Persisted across the conversation via the
   // parent's lastWebRef, so regenerate/edit reuse the last user choice.
   const [web, setWeb] = useState(true);
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const baseRef = useRef("");
-  // MediaRecorder voice path (used when an OpenAI transcription key is
-  // configured). Holds the active recorder, the mic stream (to stop its
-  // tracks on stop), the accumulated chunks, and the composer text captured
-  // at record-start so the transcript appends to what's already there.
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const micStreamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const recBaseRef = useRef("");
-  const [transcribing, setTranscribing] = useState(false);
-  // Voice typing re-arm guards. `manualStopRef` distinguishes a user click-stop
-  // from an engine auto-stop; `retriedRef` caps re-arm to one attempt so a
-  // persistently-failing engine can't loop; `errorRef` blocks re-arm after an
-  // onerror (so a permission denial doesn't spin).
-  const manualStopRef = useRef(false);
-  const retriedRef = useRef(false);
-  const errorRef = useRef(false);
-  // True once this recognition session has returned any result; lets onend
-  // tell a recoverable pause (got speech, restart) from an instant die (no
-  // speech, give up). startedAtRef timestamps each (re)start for the
-  // rapid-fail guard.
-  const gotResultRef = useRef(false);
-  const startedAtRef = useRef(0);
-  // Start false so the server and the client's first render agree (no mic
-  // button), then detect Web Speech support after mount. Computing this during
-  // render would be false on the server and true on the client → hydration
-  // mismatch on the mic button.
-  const [micCapabilities, setMicCapabilities] = useState({
-    checked: false,
-    secure: true,
-    speech: false,
-    recording: false,
-  });
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMicCapabilities({
-      checked: true,
-      secure: window.isSecureContext,
-      speech: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
-      recording:
-        !!navigator.mediaDevices?.getUserMedia && typeof window.MediaRecorder !== "undefined",
-    });
-  }, []);
-
-  useEffect(() => () => {
-    manualStopRef.current = true;
-    recognitionRef.current?.stop();
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== "inactive") {
-      recorder.onstop = null;
-      recorder.stop();
-    }
-    micStreamRef.current?.getTracks().forEach((track) => track.stop());
-  }, []);
+  const voice = useVoiceTyping({ value, onValueChange: setValue, transcriptionAvailable });
 
   // Grow to fit content, capped at ~6 lines, then scroll.
   useEffect(() => {
@@ -314,12 +264,11 @@ export function ChatInput({ onSend, disabled, placeholder, streaming, onStop, pr
     // Block send while an image is still being OCR'd: for a text-only model the
     // parsed text IS the image's content, so sending mid-parse would lose it.
     if ((!text && pending.length === 0) || disabled || streaming || parsingImage.size > 0) return;
-    onSend(text, pending.map((p) => p.attachment), docMode, web);
+    onSend(text, pending.map((p) => p.attachment), false, web);
     setValue("");
     setPending([]);
     setAddedToProject(new Set());
     setGateMsg(null);
-    setDocMode(false);
   }
 
   function onSubmit(e: FormEvent) {
@@ -334,267 +283,47 @@ export function ChatInput({ onSend, disabled, placeholder, streaming, onStop, pr
     }
   }
 
-  // Mic button entry point. Branches on whether an OpenAI transcription key
-  // is configured: record-and-transcribe (works behind blockers, no Google)
-  // vs. the browser's built-in Web Speech API (live interim, but depends on
-  // Google's speech service and a blocker-free path).
-  async function toggleVoice() {
-    if (!micCapabilities.secure) {
-      setGateMsg("Microphone access needs HTTPS on iPad. Open the secure .ts.net Tailscale link, not the http:// IP address.");
-      return;
-    }
-    const recorderAvailable = !!transcriptionAvailable && micCapabilities.recording;
-    if (!micCapabilities.speech && !recorderAvailable) {
-      setGateMsg("Voice typing is not available in this browser. Open this page in Safari, or configure transcription in Settings.");
-      return;
-    }
-    if (listening || transcribing) {
-      if (mediaRecorderRef.current?.state && mediaRecorderRef.current.state !== "inactive") stopRecording();
-      else {
-        manualStopRef.current = true;
-        recognitionRef.current?.stop();
-      }
-      return;
-    }
-    if (recorderAvailable) await startRecording();
-    else startRecognition();
-  }
-
-  // --- Browser-native Web Speech path (fallback when no OpenAI key) -------
-  function startRecognition() {
-    const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Ctor) return;
-    // Clear guards + any stale gate message at the start of each new start.
-    manualStopRef.current = false;
-    retriedRef.current = false;
-    errorRef.current = false;
-    gotResultRef.current = false;
-    setGateMsg(null);
-
-    // NOTE: no `await` before rec.start(). Chromium's Web Speech recognition
-    // must start within the user-gesture call stack; awaiting anything (e.g.
-    // navigator.permissions.query) first can drop transient activation and
-    // make start() fail instantly. The onerror handler below already covers a
-    // denied mic with a message, so the pre-check isn't worth the risk.
-
-    const rec = new Ctor();
-    rec.lang = "en-US";
-    rec.continuous = true;
-    rec.interimResults = true;
-    baseRef.current = value;
-    rec.onresult = (e: SpeechRecognitionEvent) => {
-      gotResultRef.current = true;
-      let final = "";
-      let interim = "";
-      for (let i = 0; i < e.results.length; i++) {
-        const r = e.results[i];
-        if (r.isFinal) final += r[0].transcript;
-        else interim += r[0].transcript;
-      }
-      setValue(baseRef.current + final + interim);
-    };
-    rec.onerror = (e) => {
-      errorRef.current = true;
-      const err = e.error;
-      if (err === "not-allowed" || err === "service-not-allowed") {
-        setGateMsg("Microphone blocked. On iPad, allow Microphone for this site in Safari settings, then try again.");
-      } else if (err === "no-speech") {
-        setGateMsg("Didn't catch that — try again.");
-      } else if (err === "audio-capture") {
-        setGateMsg("No microphone found.");
-      } else if (err === "network") {
-        // Chromium sends audio to a remote speech service; a blocker (Arc /
-        // Brave shields, ad/tracker extensions, or offline) makes it fail
-        // instantly. This is the most common "flashes then off, no message".
-        setGateMsg("Voice needs a network connection to the speech service — disable any blocker for this site and try again.");
-      } else if (err === "aborted") {
-        // System/user abort — no message.
-      } else {
-        // Never swallow an unknown error silently — surface the code so it's
-        // diagnosable instead of "doesn't work" with no feedback.
-        setGateMsg(`Voice error: ${err}`);
-      }
-      setListening(false);
-    };
-    rec.onend = () => {
-      // Survive the brief auto-stops that `continuous = true` doesn't fully
-      // prevent in some engines. Re-arm if the stop wasn't user/error
-      // initiated, but bail (with a message) if it dies instantly without
-      // ever recognizing anything twice in a row — that's a persistent
-      // failure, not a recoverable pause, and looping would spin forever.
-      if (manualStopRef.current || errorRef.current) {
-        setListening(false);
-        return;
-      }
-      const instantFail =
-        !gotResultRef.current && startedAtRef.current > 0 && Date.now() - startedAtRef.current < 1500;
-      if (instantFail && retriedRef.current) {
-        setListening(false);
-        setGateMsg("Voice stopped before recognizing anything — check mic permission and your connection, then try again.");
-        return;
-      }
-      retriedRef.current = true;
-      gotResultRef.current = false;
-      startedAtRef.current = Date.now();
-      try {
-        rec.start();
-      } catch {
-        setListening(false);
-      }
-    };
-    recognitionRef.current = rec;
-    // Reflect intent immediately; the gateMsg surfaces above the input if
-    // start() bails below.
-    setListening(true);
-    startedAtRef.current = Date.now();
-    try {
-      rec.start();
-    } catch {
-      setListening(false);
-      setGateMsg("Couldn't start voice typing — try again.");
-    }
-  }
-
-  // --- OpenAI Whisper path (record a clip, transcribe server-side) -------
-  // getUserMedia must run in the user-gesture stack — toggleVoice calls this
-  // directly with no prior await, so activation is intact.
-  async function startRecording() {
-    setGateMsg(null);
-    if (!window.isSecureContext) {
-      setGateMsg("Microphone access needs HTTPS on iPad. Open the secure .ts.net Tailscale link, not the http:// IP address.");
-      return;
-    }
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      setGateMsg("This browser cannot record audio. Open the secure link in Safari and try again.");
-      return;
-    }
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 },
-      });
-    } catch (cause) {
-      setGateMsg(microphoneErrorMessage(cause));
-      return;
-    }
-    micStreamRef.current = stream;
-    chunksRef.current = [];
-    recBaseRef.current = value;
-    // Chromium commonly gives WebM; Safari/iPadOS commonly gives MP4 audio.
-    const mime = preferredRecorderMimeType((candidate) => MediaRecorder.isTypeSupported(candidate));
-    let recorder: MediaRecorder;
-    try {
-      recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
-    } catch (cause) {
-      stopMicTracks();
-      setGateMsg(microphoneErrorMessage(cause));
-      return;
-    }
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
-    };
-    recorder.onstop = () => {
-      const actualMime = recorder.mimeType || chunksRef.current[0]?.type || mime || "audio/webm";
-      const blob = new Blob(chunksRef.current, { type: actualMime });
-      // Stop the mic tracks regardless of outcome so the indicator clears.
-      stopMicTracks();
-      mediaRecorderRef.current = null;
-      chunksRef.current = [];
-      if (blob.size === 0) {
-        setListening(false);
-        setGateMsg("Didn't catch anything — try again.");
-        return;
-      }
-      void transcribe(blob, audioUploadName(actualMime));
-    };
-    recorder.onerror = () => {
-      stopMicTracks();
-      setListening(false);
-      setGateMsg("Recording failed — try again.");
-    };
-    mediaRecorderRef.current = recorder;
-    setListening(true);
-    recorder.start();
-  }
-
-  function stopRecording() {
-    const r = mediaRecorderRef.current;
-    if (r && r.state !== "inactive") r.stop(); // fires onstop → transcribe
-    else stopMicTracks();
-  }
-
-  function stopMicTracks() {
-    micStreamRef.current?.getTracks().forEach((t) => t.stop());
-    micStreamRef.current = null;
-  }
-
-  async function transcribe(blob: Blob, filename: string) {
-    setListening(false);
-    setTranscribing(true);
-    setGateMsg("transcribing…");
-    try {
-      const form = new FormData();
-      form.append("audio", blob, filename);
-      const res = await fetch("/api/transcribe", { method: "POST", body: form });
-      const data = (await res.json().catch(() => ({}))) as { text?: string; error?: string };
-      if (!res.ok || (!data.text && data.error)) {
-        setGateMsg(data.error || `Transcription failed (${res.status}).`);
-      } else if (data.text) {
-        // Append the transcript to the existing composer text (with a space
-        // separator when both sides are non-empty) and clear any message.
-        const prefix = recBaseRef.current;
-        const sep = prefix && !prefix.endsWith(" ") ? " " : "";
-        setValue(prefix + sep + data.text);
-        setGateMsg(null);
-      } else {
-        setGateMsg("Didn't catch that — try again.");
-      }
-    } catch {
-      setGateMsg("Could not reach the transcription service.");
-    } finally {
-      setTranscribing(false);
-    }
-  }
-
-  const recorderAvailable = !!transcriptionAvailable && micCapabilities.recording;
-  const voiceReady = micCapabilities.secure && (micCapabilities.speech || recorderAvailable);
-
   return (
-    <form onSubmit={onSubmit} className="app-chat-input px-4 pb-5 pt-2">
-      {gateMsg && (
-        <div id="composer-status" role="status" className="mx-auto mb-1 max-w-3xl text-[11px] text-rule">{gateMsg}</div>
+    <form onSubmit={onSubmit} className="px-4 pb-4 pt-3 tab:px-6 tab:pb-5">
+      {(gateMsg || voice.message) && (
+        <div className="chat-composer-wrapper mono mb-1 text-[11px] text-danger">{gateMsg || voice.message}</div>
       )}
-      <div className="mx-auto max-w-3xl rounded-[3px] border border-line bg-paper-2 px-3 py-2 transition-colors focus-within:border-ink/40">
+      <div className="chat-composer-wrapper rounded-panel border border-border bg-surface p-3 transition-[border-color,box-shadow,transform] duration-fast ease-out focus-within:-translate-y-px focus-within:border-border-strong focus-within:shadow-card">
         {pending.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2">
             {pending.map((p) => (
               <div
                 key={p.id}
-                className="mono flex items-center gap-1.5 rounded-[2px] border border-line bg-paper px-2 py-1 text-[11px] text-ink-2"
+                className="mono flex items-center gap-1.5 rounded-control border border-border bg-surface-2 px-2.5 py-1.5 text-[11px] text-content-muted"
               >
                 {p.attachment.type === "image" ? (
                   <>
-                    <img src={p.attachment.dataUrl} alt={p.attachment.name} className="h-7 w-7 rounded-[2px] object-cover" />
-                    <span className="truncate max-w-[160px]">
+                    <img src={p.attachment.dataUrl} alt={p.attachment.name} className="h-7 w-7 rounded-md object-cover" />
+                    <span className="max-w-[160px] truncate">
                       {parsingImage.has(p.id)
                         ? "parsing…"
                         : `OCR ${(p.attachment.charCount ?? 0).toLocaleString()}c`}
                     </span>
                   </>
                 ) : (
-                  <span className="truncate max-w-[160px]">📎 {p.attachment.name} ({p.attachment.charCount.toLocaleString()}c)</span>
+                  <span className="flex max-w-[160px] items-center gap-1 truncate">
+                    <Paperclip size={11} className="shrink-0" /> {p.attachment.name} ({p.attachment.charCount.toLocaleString()}c)
+                  </span>
                 )}
                 {p.attachment.type === "file" && projectId && (
                   addedToProject.has(p.id) ? (
-                    <span className="text-feynman">added ✓</span>
+                    <span className="flex items-center gap-0.5 text-feynman">
+                      <Check size={11} /> added
+                    </span>
                   ) : (
                     <button
                       type="button"
                       onClick={() => addToProject(p.id)}
                       disabled={addingToProject === p.id}
-                      className="text-feynman hover:underline disabled:opacity-50"
+                      className="flex items-center gap-0.5 text-feynman hover:underline disabled:opacity-50"
                     >
-                      {addingToProject === p.id ? "…" : "＋ to project"}
+                      <FolderPlus size={11} />
+                      {addingToProject === p.id ? "…" : "to project"}
                     </button>
                   )
                 )}
@@ -602,9 +331,9 @@ export function ChatInput({ onSend, disabled, placeholder, streaming, onStop, pr
                   type="button"
                   onClick={() => setPending((prev) => prev.filter((x) => x.id !== p.id))}
                   aria-label="Remove attachment"
-                  className="text-ink-3 hover:text-rule"
+                  className="text-content-faint transition-colors hover:text-rule"
                 >
-                  ×
+                  <X size={12} />
                 </button>
               </div>
             ))}
@@ -619,77 +348,49 @@ export function ChatInput({ onSend, disabled, placeholder, streaming, onStop, pr
             className="hidden"
             onChange={onPickChange}
           />
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || extracting}
             title="Attach files or images (images are OCR'd so any model can read them)"
             aria-label="Attach files"
-            className="mono shrink-0 rounded-[3px] border border-line bg-paper px-2 py-1.5 text-[12px] tracking-wide text-ink-2 transition-colors hover:border-ink/40 disabled:opacity-40"
+            className="shrink-0"
           >
-            +
-          </button>
-          <button
+            <Plus size={15} strokeWidth={2} />
+          </Button>
+          <Button
             type="button"
-            onClick={() => setDocMode((v) => !v)}
-            disabled={disabled}
-            aria-pressed={docMode}
-            title="Send this message as a formatted document you can print to PDF"
-            className={`mono shrink-0 rounded-[3px] border px-2 py-1.5 text-[12px] tracking-wide transition-colors disabled:opacity-40 ${
-              docMode
-                ? "border-rule text-rule hover:bg-rule/10"
-                : "border-line bg-paper text-ink-2 hover:border-ink/40"
-            }`}
-          >
-            doc
-          </button>
-          <button
-            type="button"
+            variant="secondary"
+            size="sm"
             onClick={() => setWeb((v) => !v)}
             disabled={disabled}
             aria-pressed={web}
             title="Toggle web search for this turn"
-            className={`mono shrink-0 rounded-[3px] border px-2 py-1.5 text-[12px] tracking-wide transition-colors disabled:opacity-40 ${
-              web
-                ? "border-rule text-rule hover:bg-rule/10"
-                : "border-line bg-paper text-ink-2 hover:border-ink/40"
-            }`}
+            className={cn("shrink-0", web && "border-rule text-rule hover:bg-rule/10")}
           >
+            <Globe size={14} />
             web
-          </button>
-          <button
-            type="button"
-            onClick={toggleVoice}
-            disabled={disabled || transcribing || !micCapabilities.checked}
-            title={
-              transcribing
-                ? "Transcribing…"
-                : listening
-                  ? "Stop voice typing"
-                  : voiceReady
-                    ? "Voice type"
-                    : !micCapabilities.secure
-                      ? "Microphone needs the secure HTTPS link"
-                      : "Voice typing unavailable in this browser"
-            }
-            aria-label={
-              transcribing
-                ? "Transcribing…"
-                : listening
-                  ? "Stop voice typing"
-                  : "Voice type"
-            }
-            aria-describedby={gateMsg ? "composer-status" : undefined}
-            className={`mono shrink-0 rounded-[3px] border px-2 py-1.5 text-[12px] tracking-wide transition-colors disabled:opacity-40 ${
-              listening
-                ? "border-rule text-rule hover:bg-rule/10"
-                : voiceReady
-                  ? "border-line bg-paper text-ink-2 hover:border-ink/40"
-                  : "border-rule/50 bg-paper text-rule"
-            }`}
-          >
-            {listening ? "●" : "🎙"}
-          </button>
+          </Button>
+          {(voice.speechSupported || transcriptionAvailable) && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={voice.toggleVoice}
+              disabled={disabled || voice.transcribing}
+              title={voice.transcribing ? "Transcribing…" : voice.listening ? "Stop voice typing" : "Voice type"}
+              aria-label={voice.transcribing ? "Transcribing…" : voice.listening ? "Stop voice typing" : "Voice type"}
+              className={cn(
+                "shrink-0",
+                voice.listening && "border-rule text-rule hover:bg-rule/10",
+                voice.listening && "animate-pulse",
+              )}
+            >
+              {voice.transcribing ? <Loader2 size={15} className="animate-spin" /> : <Mic size={15} />}
+            </Button>
+          )}
           <textarea
             ref={ref}
             value={value}
@@ -698,27 +399,34 @@ export function ChatInput({ onSend, disabled, placeholder, streaming, onStop, pr
             onPaste={onPaste}
             rows={1}
             disabled={disabled}
-            placeholder={placeholder || "Ask about a concept…"}
-            className="mono max-h-48 flex-1 resize-none bg-transparent py-1 text-[13px] leading-6 text-ink outline-none placeholder:text-ink-3 disabled:opacity-50"
+            placeholder={placeholder || "Message Loom…"}
+            className="max-h-48 flex-1 resize-none bg-transparent px-1 py-1.5 text-[13px] leading-6 text-ink outline-none placeholder:text-content-faint disabled:opacity-50"
           />
           {streaming ? (
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={onStop}
               aria-label="Stop generating"
-              className="mono shrink-0 rounded-[3px] border border-rule px-3 py-1.5 text-[12px] tracking-wide text-rule transition-colors hover:bg-rule/10"
+              className="shrink-0 border-rule bg-rule/5 text-rule hover:bg-rule/10"
+              title="Stop (Esc)"
             >
+              <Square size={13} className="fill-current" />
               stop
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               type="submit"
+              variant="accent"
+              size="sm"
               disabled={disabled || (!value.trim() && pending.length === 0) || parsingImage.size > 0}
               aria-label="Send"
-              className="mono shrink-0 rounded-[3px] bg-ink px-3 py-1.5 text-[12px] tracking-wide text-paper-2 transition-opacity hover:opacity-90 disabled:opacity-30"
+              className="shrink-0"
             >
-              {docMode ? "send doc ↵" : "send ↵"}
-            </button>
+              <ArrowUp size={15} strokeWidth={2.25} />
+              send
+            </Button>
           )}
         </div>
       </div>

@@ -151,7 +151,7 @@ export async function ingestFromText(
         text: chunk.text,
         embedding: encodeEmbedding(embeddings[i]),
         ordinal: i,
-        loc: chunk.loc,
+        page: chunk.loc?.page ?? null,
       })),
     );
     updateMaterialStatus(materialId, "ready", { charCount: text.length, text });

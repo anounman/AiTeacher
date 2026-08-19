@@ -7,6 +7,6 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  deleteMaterial(id);
+  await deleteMaterial(id);
   return NextResponse.json({ ok: true });
 }

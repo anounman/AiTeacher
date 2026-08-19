@@ -1,6 +1,8 @@
 "use client";
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { Copy, Check, ExternalLink } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 
 // Resize script injected into the artifact's HTML so the iframe reports its
 // content height to the parent (which sets the iframe height). The previous
@@ -90,17 +92,17 @@ export const Artifact = memo(function Artifact({ html }: { html: string }) {
   }
 
   return (
-    <div className="my-2 overflow-hidden rounded-[3px] border border-line bg-paper-2">
-      <div className="mono flex items-center gap-2 border-b border-line bg-paper-3 px-3 py-1.5 text-[10px] tracking-wide text-ink-3">
+    <div className="my-3 overflow-hidden rounded-card border border-border bg-surface-2 shadow-card">
+      <div className="mono flex items-center gap-2 border-b border-border bg-surface px-3 py-1.5 text-[10px] tracking-wide text-content-faint">
         <span className="h-1 w-1 rounded-full bg-rule" />
-        visualization · html
-        <div className="ml-auto flex items-center gap-3">
-          <button type="button" onClick={copyHtml} className="hover:text-ink">
-            {copied ? "copied" : "copy"}
-          </button>
-          <button type="button" onClick={openInTab} className="hover:text-ink">
-            open
-          </button>
+        custom visualization
+        <div className="ml-auto flex items-center gap-1">
+          <IconButton label={copied ? "Copied HTML" : "Copy HTML"} size="sm" onClick={copyHtml}>
+            {copied ? <Check size={13} /> : <Copy size={13} />}
+          </IconButton>
+          <IconButton label="Open in new tab" size="sm" onClick={openInTab}>
+            <ExternalLink size={13} />
+          </IconButton>
         </div>
       </div>
       <iframe
@@ -109,7 +111,7 @@ export const Artifact = memo(function Artifact({ html }: { html: string }) {
         sandbox="allow-scripts"
         srcDoc={srcDoc}
         style={{ height }}
-        className="block w-full border-0 bg-paper-2"
+        className="block w-full border-0 bg-surface-2"
       />
     </div>
   );

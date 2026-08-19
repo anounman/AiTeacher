@@ -1,7 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { FolderKanban, GraduationCap } from "lucide-react";
 import type { Project } from "@/lib/db/schema";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/Select";
+import { IconButton } from "@/components/ui/IconButton";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip";
 
 interface Props {
   projects: Project[];
@@ -11,26 +21,43 @@ interface Props {
 
 export function ProjectSwitcher({ projects, activeProjectId, onChange }: Props) {
   return (
-    <div className="px-3 pb-2">
-      <div className="mono flex items-center gap-1.5">
-        <select
-          value={activeProjectId ?? ""}
-          onChange={(e) => onChange(e.target.value || null)}
-          aria-label="Project"
-          className="mono w-full rounded-[3px] border border-line bg-paper-2 px-2 py-1.5 text-[12px] text-ink outline-none focus:border-ink/40"
+    <div>
+      <div className="flex items-center gap-1.5">
+        <Select
+          value={activeProjectId ?? "__standalone__"}
+          onValueChange={(v) => onChange(v === "__standalone__" ? null : v)}
         >
-          <option value="">Standalone</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
-        <Link
-          href="/projects"
-          aria-label="Manage projects"
-          className="mono shrink-0 text-ink-3 transition-colors hover:text-ink"
-        >
-          ⌗
-        </Link>
+          <SelectTrigger aria-label="Project">
+            <SelectValue placeholder="Standalone" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__standalone__">Standalone</SelectItem>
+            {projects.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.study_enabled && (
+                  <GraduationCap size={12} strokeWidth={1.75} className="mr-1 inline text-content-faint" />
+                )}
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <IconButton
+              asChild
+              label="Manage projects"
+              size="md"
+              variant="solid"
+              className="shrink-0"
+            >
+              <Link href="/projects">
+                <FolderKanban size={15} />
+              </Link>
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Manage projects</TooltipContent>
+        </Tooltip>
       </div>
     </div>
   );

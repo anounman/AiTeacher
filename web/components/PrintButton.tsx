@@ -1,15 +1,21 @@
 "use client";
 
+import { Printer } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+
 // Triggers the browser's print dialog (→ Save as PDF). `no-print` keeps it
 // off the printed page itself.
 export function PrintButton() {
   return (
-    <button
+    <Button
       type="button"
+      variant="primary"
+      size="sm"
       onClick={() => window.print()}
-      className="no-print mono rounded-[3px] bg-ink px-4 py-1.5 text-[12px] tracking-wide text-paper-2 transition-opacity hover:opacity-90"
+      className="no-print"
     >
+      <Printer size={14} />
       print / save as PDF ⌘P
-    </button>
+    </Button>
   );
 }

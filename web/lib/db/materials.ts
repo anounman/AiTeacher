@@ -1,5 +1,15 @@
 import { db } from "./index";
 import type { Material, MaterialSourceType, MaterialStatus } from "./schema";
+// Lazily imported inside deleteMaterial so the DB module graph does not eagerly
+// load mupdf (which uses top-level await, incompatible with the project's CJS
+// test transpile). deleteMaterial is the only caller and runs at request time,
+// not module load — so the dynamic import has no latency impact on the hot path.
+type PdfPagesApi = typeof import("@/lib/ingest/pdf-pages");
+let pdfPagesPromise: Promise<PdfPagesApi> | null = null;
+function loadPdfPages(): Promise<PdfPagesApi> {
+  if (!pdfPagesPromise) pdfPagesPromise = import("@/lib/ingest/pdf-pages");
+  return pdfPagesPromise;
+}
 
 export function createMaterial(init: {
   projectId: string;
@@ -36,6 +46,17 @@ export function getMaterial(id: string): Material | undefined {
   return db.prepare("SELECT * FROM materials WHERE id = ?").get(id) as Material | undefined;
 }
 
+// Find a PDF material in a project by its source_ref (the upload filename
+// without .pdf). Used by heal-on-reupload: when the user re-uploads a file
+// whose name matches an existing deck that predates page-image rendering, we
+// heal that deck (attach the PDF + render pages) instead of creating a
+// duplicate — so the concept graph and chunks stay intact.
+export function findPdfMaterialByRef(projectId: string, sourceRef: string): Material | undefined {
+  return db
+    .prepare("SELECT * FROM materials WHERE project_id = ? AND source_type = 'pdf' AND source_ref = ? LIMIT 1")
+    .get(projectId, sourceRef) as Material | undefined;
+}
+
 export function updateMaterialStatus(
   id: string,
   status: MaterialStatus,
@@ -53,8 +74,13 @@ export function updateMaterialStatus(
   }
 }
 
-export function deleteMaterial(id: string): void {
-  // ON DELETE CASCADE drops chunks.
+export async function deleteMaterial(id: string): Promise<void> {
+  // ON DELETE CASCADE drops chunks; also remove any rendered page images and
+  // the retained source PDF on disk so we don't orphan files when their
+  // material row goes away.
+  const { deletePageImages, deleteSourcePdf } = await loadPdfPages();
+  deletePageImages(id);
+  deleteSourcePdf(id);
   db.prepare("DELETE FROM materials WHERE id = ?").run(id);
 }
 
@@ -63,36 +89,30 @@ export function addChunk(
   ordinal: number,
   text: string,
   embedding: Buffer,
-  loc?: { page?: number } | null,
+  page: number | null = null,
 ): void {
   db.prepare(
-    "INSERT INTO chunks (id, material_id, ordinal, text, embedding, loc, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-  ).run(crypto.randomUUID(), materialId, ordinal, text, embedding, loc ? JSON.stringify(loc) : null, Date.now());
+    "INSERT INTO chunks (id, material_id, ordinal, text, embedding, page, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  ).run(crypto.randomUUID(), materialId, ordinal, text, embedding, page, Date.now());
 }
 
 // Insert all chunks for a material inside a single transaction so a mid-loop
 // failure leaves no partial chunks. Used by ingestFromText.
 export function addChunks(
   materialId: string,
-  chunks: { text: string; embedding: Buffer; ordinal: number; loc?: { page?: number } | null }[],
+  chunks: { text: string; embedding: Buffer; ordinal: number; page: number | null }[],
 ): void {
   const insert = db.prepare(
-    "INSERT INTO chunks (id, material_id, ordinal, text, embedding, loc, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO chunks (id, material_id, ordinal, text, embedding, page, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
   );
-  const run = db.transaction((rows: { text: string; embedding: Buffer; ordinal: number; loc?: { page?: number } | null }[]) => {
-    const now = Date.now();
-    for (const r of rows) {
-      insert.run(
-        crypto.randomUUID(),
-        materialId,
-        r.ordinal,
-        r.text,
-        r.embedding,
-        r.loc ? JSON.stringify(r.loc) : null,
-        now,
-      );
-    }
-  });
+  const run = db.transaction(
+    (rows: { text: string; embedding: Buffer; ordinal: number; page: number | null }[]) => {
+      const now = Date.now();
+      for (const r of rows) {
+        insert.run(crypto.randomUUID(), materialId, r.ordinal, r.text, r.embedding, r.page, now);
+      }
+    },
+  );
   run(chunks);
 }
 
@@ -102,13 +122,13 @@ export function listChunkEmbeddingsForProject(projectId: string): {
   materialId: string;
   materialTitle: string;
   ordinal: number;
+  page: number | null;
   text: string;
   embedding: Buffer;
-  loc: string | null;
 }[] {
   return db
     .prepare(
-      `SELECT c.id AS chunkId, c.material_id AS materialId, c.ordinal, c.text, c.embedding, c.loc, m.title AS materialTitle
+      `SELECT c.id AS chunkId, c.material_id AS materialId, c.ordinal, c.page, c.text, c.embedding, m.title AS materialTitle
        FROM chunks c JOIN materials m ON m.id = c.material_id
        WHERE m.project_id = ? AND m.status = 'ready'
        ORDER BY c.material_id, c.ordinal`,
@@ -118,10 +138,20 @@ export function listChunkEmbeddingsForProject(projectId: string): {
     .all(projectId) as any;
 }
 
-// Full-text half of hybrid retrieval. The caller supplies an FTS-safe query
-// made from quoted terms, so punctuation in a natural-language question never
-// becomes FTS syntax. Lower bm25 rank is better.
-export function listLexicalChunksForProject(
+// The chunks of a single material (id + ordinal + text, NO embedding).
+// SP1 reads these to extract concepts per-chunk; the embeddings already
+// exist from ingest time and aren't needed here.
+export function listChunksForMaterial(materialId: string): { id: string; ordinal: number; text: string }[] {
+  return db
+    .prepare("SELECT id, ordinal, text FROM chunks WHERE material_id = ? ORDER BY ordinal ASC")
+    .all(materialId) as { id: string; ordinal: number; text: string }[];
+}
+
+// Set a single chunk's page (used by the chunk-page back-fill migration, which
+// re-derives page numbers for chunks ingested before the page column existed).
+export function setChunkPage(chunkId: string, page: number): void {
+  db.prepare("UPDATE chunks SET page = ? WHERE id = ?").run(page, chunkId);
+}export function listLexicalChunksForProject(
   projectId: string,
   ftsQuery: string,
   limit = 50,
@@ -155,11 +185,3 @@ export function listLexicalChunksForProject(
   }[];
 }
 
-// The chunks of a single material (id + ordinal + text, NO embedding).
-// SP1 reads these to extract concepts per-chunk; the embeddings already
-// exist from ingest time and aren't needed here.
-export function listChunksForMaterial(materialId: string): { id: string; ordinal: number; text: string }[] {
-  return db
-    .prepare("SELECT id, ordinal, text FROM chunks WHERE material_id = ? ORDER BY ordinal ASC")
-    .all(materialId) as { id: string; ordinal: number; text: string }[];
-}

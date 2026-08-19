@@ -59,6 +59,7 @@ export const SCHEMA_SQL = [
     text TEXT NOT NULL,
     embedding BLOB NOT NULL,
     loc TEXT,                       -- JSON provenance, e.g. {"page": 4}
+    page INTEGER,                   -- 1-indexed PDF page (null for URL materials)
     created_at INTEGER NOT NULL,
     FOREIGN KEY (material_id) REFERENCES materials(id) ON DELETE CASCADE
   )`,

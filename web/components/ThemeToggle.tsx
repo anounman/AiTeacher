@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Sun, Moon } from "lucide-react";
 
 type Theme = "light" | "dark";
 
-// Single glyph toggle. The no-flash script in layout.tsx sets
-// <html data-theme> before paint; this component reconciles from the
-// settings DB on mount and flips it on click, mirroring to localStorage
-// (no-flash on reload) and the settings DB (cross-session source).
+// Icon toggle. The no-flash script in layout.tsx sets <html data-theme> before
+// paint; this component reconciles from the settings DB on mount and flips it
+// on click, mirroring to localStorage (no-flash on reload) and the settings DB
+// (cross-session source). Lives in the rail footer; sized to match IconButton.
 export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>("light");
   const [mounted, setMounted] = useState(false);
@@ -55,16 +56,19 @@ export function ThemeToggle() {
     }).catch(() => {});
   }
 
+  const isDark = mounted ? theme === "dark" : false;
+  const label = `Switch to ${isDark ? "light" : "dark"} theme`;
+
   return (
     <button
       onClick={toggle}
-      aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-      title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-      className="mono text-[14px] leading-none text-ink-3 transition-colors hover:text-ink"
+      aria-label={label}
+      title={label}
+      className="inline-flex h-10 w-10 items-center justify-center rounded-control text-content-faint transition-[transform,background-color,color] duration-fast ease-out hover:-translate-y-px hover:bg-surface hover:text-content focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface-2 outline-none"
     >
-      {/* Render a stable glyph until mounted to avoid a hydration mismatch; */}
-      {/* the no-flash script has already set the correct page theme. */}
-      {mounted ? (theme === "dark" ? "☾" : "☀") : "☀"}
+      {/* Render a stable icon until mounted to avoid a hydration mismatch; the
+          no-flash script has already set the correct page theme. */}
+      {isDark ? <Sun size={17} strokeWidth={1.75} /> : <Moon size={17} strokeWidth={1.75} />}
     </button>
   );
 }

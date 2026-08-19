@@ -13,6 +13,14 @@ export const LLM_RELATIONS = [
 ] as const;
 export type ConceptLLMRelation = (typeof LLM_RELATIONS)[number];
 
+// Relations that are semantically symmetric — A R B and B R A mean the same
+// thing, so an edge between a pair should be stored once regardless of which
+// direction the model emitted. contrasts_with is the only symmetric one in
+// the set (prerequisite_of / part_of / example_of / applies_to / generalizes
+// are all directional). Used to canonicalize edge direction at insert time so
+// reversed model emissions collapse onto one row instead of creating two.
+export const SYMMETRIC_RELATIONS = new Set<ConceptLLMRelation>(["contrasts_with"]);
+
 // Confidence trail (adapted from the graphify skill). EXTRACTED = directly
 // stated; INFERRED = reasoned; AMBIGUOUS = weak/uncertain.
 export const EDGE_CONFIDENCE = ["EXTRACTED", "INFERRED", "AMBIGUOUS"] as const;
@@ -61,7 +69,7 @@ const conceptEdgeSchema = z.object({
 export const conceptExtractionSchema = z.object({
   concepts: z
     .array(conceptNodeSchema)
-    .describe("The distinct concepts present in this text. Canonical singular-noun labels; merge near-synonyms into one entry. Aim for the real concepts, not every noun."),
+    .describe("Only the BROAD, textbook-section-level topics this chunk is about (at most ~5, often 1–3). Canonical singular-noun labels; merge near-synonyms AND fold examples/terms/formulas/steps into their parent concept. Do not list details as separate concepts."),
   edges: z
     .array(conceptEdgeSchema)
     .describe("Relations between the concepts above. source and target must each match a label in `concepts`. Omit edges you can't ground."),

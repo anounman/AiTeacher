@@ -1,6 +1,13 @@
 import { embed, embedMany } from "ai";
 import { getProvider, getModelConfig } from "@/lib/llm/provider";
 
+// Per-call timeout. Without this, a hung/unreachable embedding model would
+// stall ingestion (a material stuck in `processing` forever) or the concept
+// build (embedMissingConcepts) indefinitely — the chat path already has a
+// 90s per-call cap; embedding batches of short texts should finish well under
+// this even on a cold local model.
+const EMBED_TIMEOUT_MS = 60_000;
+
 // Resolve the live embedding model from the provider layer.
 function embeddingModel() {
   const cfg = getModelConfig();
@@ -10,16 +17,25 @@ function embeddingModel() {
 }
 
 export async function embedText(text: string): Promise<number[]> {
-  const { embedding } = await embed({ model: embeddingModel(), value: text });
+  const { embedding } = await embed({
+    model: embeddingModel(),
+    value: text,
+    abortSignal: AbortSignal.timeout(EMBED_TIMEOUT_MS),
+  });
   return embedding;
 }
 
-// Embed in batches of 64 to keep requests small.
+// Embed in batches of 64 to keep requests small. Each batch gets its own
+// timeout so one slow batch can't block the rest indefinitely.
 export async function embedManyTexts(texts: string[]): Promise<number[][]> {
   const out: number[][] = [];
   for (let i = 0; i < texts.length; i += 64) {
     const batch = texts.slice(i, i + 64);
-    const { embeddings } = await embedMany({ model: embeddingModel(), values: batch });
+    const { embeddings } = await embedMany({
+      model: embeddingModel(),
+      values: batch,
+      abortSignal: AbortSignal.timeout(EMBED_TIMEOUT_MS),
+    });
     out.push(...embeddings);
   }
   return out;

@@ -56,6 +56,24 @@ export function getProjectConceptIds(projectId: string): string[] {
   return rows.map((r) => r.id);
 }
 
+// Wipe the project's entire concept graph: concepts, edges, provenance, and
+// card↔concept links. concept_edges / concept_sources / card_concepts all
+// reference concepts(id) ON DELETE CASCADE, so deleting the concept rows
+// cascades. Used by a forced "rebuild from scratch" so a new extraction
+// (e.g. with a coarser prompt) replaces the old graph instead of merging
+// onto it and leaving orphan concepts. Card scheduling / review history
+// (card-keyed) are preserved.
+export function deleteConceptsForProject(projectId: string): void {
+  db.prepare("DELETE FROM concepts WHERE project_id = ?").run(projectId);
+}
+
+// Clear per-material extraction records for a project so a forced rebuild
+// re-extracts every ready material (the content_hash idempotency skip needs
+// these gone, or unchanged materials would be skipped).
+export function deleteExtractionsForProject(projectId: string): void {
+  db.prepare("DELETE FROM material_extractions WHERE project_id = ?").run(projectId);
+}
+
 export function listConceptsForProject(projectId: string): Concept[] {
   return db
     .prepare("SELECT * FROM concepts WHERE project_id = ? ORDER BY label ASC")
@@ -180,7 +198,7 @@ export function upsertMaterialExtraction(
   materialId: string,
   projectId: string,
   status: MaterialExtractionStatus,
-  opts?: { contentHash?: string; conceptCount?: number; edgeCount?: number; error?: string },
+  opts?: { contentHash?: string; conceptCount?: number; edgeCount?: number; error?: string | null },
 ): void {
   const extractedAt = status === "ready" || status === "error" ? Date.now() : null;
   db.prepare(
@@ -191,10 +209,16 @@ export function upsertMaterialExtraction(
        status = excluded.status,
        content_hash = CASE WHEN excluded.content_hash IS NULL
                            THEN material_extractions.content_hash ELSE excluded.content_hash END,
-       concept_count = CASE WHEN excluded.concept_count = 0
-                            THEN material_extractions.concept_count ELSE excluded.concept_count END,
-       edge_count = CASE WHEN excluded.edge_count = 0
-                         THEN material_extractions.edge_count ELSE excluded.edge_count END,
+       -- Counts are authoritative only at a terminal state (ready/error): a
+       -- real extraction's count (including 0) must overwrite the old value, or
+       -- a re-extraction that produced fewer/zero concepts would keep the stale
+       -- count and mask the regression. During the interim "extracting" state we
+       -- preserve the prior count so the UI chip keeps showing the old value
+       -- while the build is in flight.
+       concept_count = CASE WHEN excluded.status IN ('ready','error')
+                            THEN excluded.concept_count ELSE material_extractions.concept_count END,
+       edge_count = CASE WHEN excluded.status IN ('ready','error')
+                         THEN excluded.edge_count ELSE material_extractions.edge_count END,
        error = excluded.error,
        extracted_at = CASE WHEN excluded.extracted_at IS NULL
                            THEN material_extractions.extracted_at ELSE excluded.extracted_at END`,
@@ -223,12 +247,26 @@ export function countConceptsForMaterial(materialId: string): number {
   return row.n;
 }
 
-// Set edge_count on every ready extraction for a project to the project total.
-// Called once after the full project pass + similarity recomputation.
-export function setEdgeCountsForProject(projectId: string, total: number): void {
+// Ephemeral build-progress row for a project. The extract POST writes
+// processed/total as chunks complete; the GET /api/concepts poll reads it so the
+// UI can render a live progress bar. Cleared when the build ends.
+export function setBuildProgress(projectId: string, processed: number, total: number): void {
   db.prepare(
-    "UPDATE material_extractions SET edge_count = ? WHERE project_id = ? AND status = 'ready'",
-  ).run(total, projectId);
+    `INSERT INTO build_progress (project_id, processed, total, started_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(project_id) DO UPDATE SET processed = excluded.processed, total = excluded.total`,
+  ).run(projectId, processed, total, Date.now());
+}
+
+export function getBuildProgress(projectId: string): { processed: number; total: number } | undefined {
+  const row = db
+    .prepare("SELECT processed, total FROM build_progress WHERE project_id = ?")
+    .get(projectId) as { processed: number; total: number } | undefined;
+  return row;
+}
+
+export function clearBuildProgress(projectId: string): void {
+  db.prepare("DELETE FROM build_progress WHERE project_id = ?").run(projectId);
 }
 
 export interface ConceptDetail {

@@ -2,7 +2,12 @@
 
 import { memo, useMemo, useState } from "react";
 import Link from "next/link";
+import { AnimatePresence, motion } from "motion/react";
+import { RotateCw, ChevronLeft, ChevronRight, Shuffle, Check, ArrowRight } from "lucide-react";
 import { Markdown } from "./Markdown";
+import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
+import { useMotion, cardFlip } from "@/lib/motion";
 import { parseFlashcards, type Flashcard } from "@/lib/flashcards/parse";
 
 interface Props {
@@ -61,10 +66,11 @@ export const FlashcardDeck = memo(function FlashcardDeck({
   const [savedDeckId, setSavedDeckId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const m = useMotion();
 
   if (cards.length === 0) {
     return (
-      <div className="mono my-2 rounded-[3px] border border-line bg-paper-2 px-4 py-3 text-[12px] text-ink-3">
+      <div className="mono my-2 rounded-card border border-border bg-surface-2 px-4 py-3 text-[12px] text-content-faint">
         no flashcards
       </div>
     );
@@ -119,8 +125,8 @@ export const FlashcardDeck = memo(function FlashcardDeck({
   }
 
   return (
-    <div className="my-2 overflow-hidden rounded-[3px] border border-line bg-paper-2">
-      <div className="mono flex items-center gap-2 border-b border-line bg-paper-3 px-3 py-1.5 text-[10px] tracking-wide text-ink-3">
+    <div className="my-3 overflow-hidden rounded-card border border-border bg-surface-2 shadow-card">
+      <div className="mono flex items-center gap-2 border-b border-border bg-surface px-3 py-1.5 text-[10px] tracking-wide text-content-faint">
         <span className="h-1 w-1 rounded-full bg-rule" />
         flashcards · {total} card{total === 1 ? "" : "s"}
         <span className="ml-auto tabular-nums">
@@ -131,7 +137,9 @@ export const FlashcardDeck = memo(function FlashcardDeck({
       {/* Card face — click (or Enter/Space) to flip. A div rather than a button
           so Markdown can render block-level content (<p>, lists, KaTeX) without
           invalid nesting inside a <button>. Min height keeps the layout stable
-          as you flip and move between cards of different lengths. */}
+          as you flip and move between cards of different lengths. The face
+          re-enters with a rotateY flip impression keyed on `flipped`; reduced
+          motion renders it instantly. */}
       <div
         role="button"
         tabIndex={0}
@@ -142,75 +150,76 @@ export const FlashcardDeck = memo(function FlashcardDeck({
             setFlipped((f) => !f);
           }
         }}
-        className="block min-h-[140px] w-full cursor-pointer border-b border-line bg-paper px-5 py-4 text-left transition-colors hover:bg-paper-2/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-rule/40"
+        className="block min-h-[140px] w-full cursor-pointer border-b border-border bg-surface px-5 py-5 text-left transition-[background-color,transform] duration-fast ease-out hover:bg-surface-2/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring-accent/40"
         aria-label={flipped ? "Show front" : "Show back"}
+        style={{ perspective: 1000 }}
       >
-        <div className="mono mb-2 text-[10px] tracking-wide text-ink-3">
-          {flipped ? "A" : "Q"}
-        </div>
-        <Markdown content={flipped ? card.back : card.front} className="prose-chat text-[15px] leading-relaxed text-ink" />
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={flipped ? "back" : "front"}
+            {...m}
+            variants={cardFlip}
+            className="mono mb-2 text-[10px] tracking-wide text-content-faint"
+          >
+            {flipped ? "A" : "Q"}
+          </motion.div>
+        </AnimatePresence>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={flipped ? "back-content" : "front-content"}
+            {...m}
+            variants={cardFlip}
+          >
+            <Markdown content={flipped ? card.back : card.front} className="prose-chat text-[15px] leading-relaxed text-ink" />
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       <div className="flex items-center gap-2 px-3 py-2">
-        <button
-          type="button"
-          onClick={() => setFlipped((f) => !f)}
-          className="mono rounded-[3px] border border-line bg-paper px-3 py-1.5 text-[12px] tracking-wide text-ink-2 transition-colors hover:border-ink/40"
-        >
+        <Button type="button" variant="secondary" size="sm" onClick={() => setFlipped((f) => !f)}>
+          <RotateCw size={13} />
           flip
-        </button>
-        <button
-          type="button"
-          onClick={() => go(-1)}
-          disabled={pos === 0}
-          className="mono rounded-[3px] border border-line bg-paper px-3 py-1.5 text-[12px] tracking-wide text-ink-2 transition-colors hover:border-ink/40 disabled:opacity-40"
-        >
-          ‹ prev
-        </button>
-        <button
-          type="button"
-          onClick={() => go(1)}
-          disabled={pos >= total - 1}
-          className="mono rounded-[3px] border border-line bg-paper px-3 py-1.5 text-[12px] tracking-wide text-ink-2 transition-colors hover:border-ink/40 disabled:opacity-40"
-        >
-          next ›
-        </button>
-        <button
-          type="button"
-          onClick={shuffle}
-          className="mono rounded-[3px] border border-line bg-paper px-3 py-1.5 text-[12px] tracking-wide text-ink-2 transition-colors hover:border-ink/40"
-        >
+        </Button>
+        <IconButton label="Previous card" variant="solid" size="sm" onClick={() => go(-1)} disabled={pos === 0}>
+          <ChevronLeft size={15} />
+        </IconButton>
+        <IconButton label="Next card" variant="solid" size="sm" onClick={() => go(1)} disabled={pos >= total - 1}>
+          <ChevronRight size={15} />
+        </IconButton>
+        <Button type="button" variant="secondary" size="sm" onClick={shuffle}>
+          <Shuffle size={13} />
           shuffle
-        </button>
+        </Button>
 
         {!reviewMode && (
           <div className="ml-auto flex items-center gap-3">
             {savedDeckId ? (
-              <span className="mono flex items-center gap-2 text-[12px] text-feynman">
-                saved ✓
+              <span className="mono flex items-center gap-1.5 text-[12px] text-feynman">
+                <Check size={13} /> saved
                 <Link
                   href={`/decks/${savedDeckId}`}
-                  className="text-ink-2 underline-offset-2 hover:underline"
+                  className="flex items-center gap-0.5 text-content-muted underline-offset-2 hover:text-content hover:underline"
                 >
-                  open →
+                  open <ArrowRight size={12} />
                 </Link>
               </span>
             ) : (
-              <button
+              <Button
                 type="button"
+                variant="primary"
+                size="sm"
                 onClick={save}
                 disabled={saving}
-                className="mono rounded-[3px] bg-ink px-3 py-1.5 text-[12px] tracking-wide text-paper-2 transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 {saving ? "saving…" : "save to my decks"}
-              </button>
+              </Button>
             )}
           </div>
         )}
       </div>
 
       {saveError && (
-        <div className="mono px-3 pb-2 text-[11px] text-rule">{saveError}</div>
+        <div className="mono px-3 pb-2 text-[11px] text-danger">{saveError}</div>
       )}
     </div>
   );

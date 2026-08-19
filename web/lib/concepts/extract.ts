@@ -19,11 +19,14 @@ import {
   getMaterialExtraction,
   upsertMaterialExtraction,
   countConceptsForMaterial,
-  setEdgeCountsForProject,
+  deleteConceptsForProject,
+  deleteExtractionsForProject,
+  setBuildProgress,
+  clearBuildProgress,
 } from "@/lib/db";
 import { embedManyTexts, encodeEmbedding, decodeEmbedding, cosine } from "@/lib/embed";
 import { getModelConfig, getProvider } from "@/lib/llm/provider";
-import { conceptExtractionSchema, type ConceptExtractionOutput } from "@/lib/concepts/schema";
+import { conceptExtractionSchema, SYMMETRIC_RELATIONS, type ConceptExtractionOutput } from "@/lib/concepts/schema";
 import { CONCEPT_EXTRACTION_PROMPT } from "@/lib/prompts";
 import { normalizeLabel, contentHash } from "@/lib/concepts/slug";
 
@@ -34,21 +37,41 @@ import { normalizeLabel, contentHash } from "@/lib/concepts/slug";
 const SIMILARITY_THRESHOLD = 0.78;
 
 // Cap per-chunk LLM fan-out so we don't hammer the local model with N
-// simultaneous generateObject calls. 3 keeps throughput up without
-// over-subscribing a single Ollama instance.
-const CONCURRENCY = 3;
+// Per-chunk LLM fan-out width. Measured against the Ollama cloud backend
+// (glm-5.2:cloud via localhost:11434): 4 concurrent ≈ 1 request's latency, but
+// 8 concurrent spreads 1.3→4.75s — the backend runs only ~4 requests at once
+// and queues the rest. So the cloud width is a small buffer above 4 to keep
+// those slots fed through per-call latency variance, not a large fan-out
+// (which would just build a local queue and inflate memory). A single *local*
+// Ollama model serializes through one slot, so we stay narrow there. The
+// configured model name carries Ollama's ":cloud" suffix for cloud-hosted
+// models, so we adapt the width to the backend actually in use.
+const CLOUD_CONCURRENCY = 6;
+const LOCAL_CONCURRENCY = 3;
+function extractionConcurrency(model: string): number {
+  return model.endsWith(":cloud") ? CLOUD_CONCURRENCY : LOCAL_CONCURRENCY;
+}
 
 // Per-chunk LLM call timeout. Without this, a slow/stuck model call on a
 // dense chunk blocks its worker-pool slot forever — observed as a build that
 // hangs indefinitely on large materials. On timeout we let the chunk fail
 // (non-fatal: recorded, skipped) rather than wait infinitely or retry into
-// another slow call. 90s is generous for an ~800-char chunk at medium reasoning.
+// another slow call. 90s is generous for a chunk at low reasoning.
 const PER_CALL_TIMEOUT_MS = 90_000;
 
-// Reasoning effort for extraction. "high" was several× slower per chunk with
-// no noticeable concept-quality gain for this task; "medium" is the right
-// cost/quality point for pulling concepts + relations out of study text.
-const REASONING_EFFORT = "medium" as const;
+// Reasoning effort for extraction. Tested high → medium → low: high was
+// several× slower with no concept-quality gain. medium vs low: low is 2–3×
+// faster per chunk and extraction (pulling a handful of broad concepts +
+// their relations from a text chunk) is mechanical enough that low holds up.
+// Favors throughput for decks with many chunks; revisit if edge quality drops.
+const REASONING_EFFORT = "low" as const;
+
+// Hard per-chunk concept cap (backstop). The prompt asks for ≤ ~5 broad
+// concepts per chunk; this guarantees a disobedient model can't blow a chunk
+// up to dozens of fine-grained terms. The model lists most-central concepts
+// first, so we keep the leading MAX. Edges referencing a dropped concept are
+// skipped. This is the single biggest guard against "236 concepts per chapter".
+const MAX_CONCEPTS_PER_CHUNK = 6;
 
 function isAbortError(err: unknown): boolean {
   if (!err) return false;
@@ -201,7 +224,16 @@ function computeSimilarityEdges(projectId: string): void {
 // Main entry point: extract concepts + edges from every ready material in the
 // project. Idempotent per material via content_hash (unchanged materials are
 // skipped). Per-chunk/per-material errors are non-fatal and collected.
-export async function extractConceptsForProject(projectId: string): Promise<{
+//
+// `force` wipes the project's existing concept graph + extraction records first
+// and re-extracts every ready material from scratch. Use it when the
+// extraction prompt/granularity changed and the old fine-grained graph should
+// be replaced rather than merged onto (a plain re-run would skip unchanged
+// materials and leave their old concepts as orphans).
+export async function extractConceptsForProject(
+  projectId: string,
+  opts: { force?: boolean } = {},
+): Promise<{
   processed: number;
   concepts: number;
   edges: number;
@@ -211,6 +243,14 @@ export async function extractConceptsForProject(projectId: string): Promise<{
   const cfg = getModelConfig();
   const provider = getProvider(cfg.provider);
   const model = provider.languageModel({ model: cfg.model, baseURL: cfg.baseURL, apiKey: cfg.apiKey });
+  const concurrency = extractionConcurrency(cfg.model);
+
+  // Forced rebuild: drop the old graph + extraction state so nothing is skipped
+  // and no orphan concepts linger. Card scheduling / review history survive.
+  if (opts.force) {
+    deleteConceptsForProject(projectId); // cascades to edges / sources / card_concepts
+    deleteExtractionsForProject(projectId);
+  }
 
   const materials = listMaterials(projectId).filter((m) => m.status === "ready");
   let processed = 0;
@@ -218,11 +258,42 @@ export async function extractConceptsForProject(projectId: string): Promise<{
   const errors: string[] = [];
   const newConceptIds = new Set<string>();
 
+  // Chunk-level progress for the UI's progress bar: total = chunks across all
+  // ready materials (one query), and a per-material count so skipped materials
+  // can be accounted for without re-querying. The extract POST writes
+  // processed/total as chunks complete; GET /api/concepts polls it.
+  const chunkCounts = new Map<string, number>();
+  let totalChunks = 0;
+  {
+    const rows = db
+      .prepare(
+        "SELECT material_id, COUNT(*) AS n FROM chunks WHERE material_id IN (SELECT id FROM materials WHERE project_id = ? AND status = 'ready') GROUP BY material_id",
+      )
+      .all(projectId) as { material_id: string; n: number }[];
+    for (const r of rows) {
+      chunkCounts.set(r.material_id, r.n);
+      totalChunks += r.n;
+    }
+  }
+  let processedChunks = 0;
+  if (totalChunks > 0) setBuildProgress(projectId, 0, totalChunks);
+  try {
   for (const m of materials) {
     const full = getMaterial(m.id);
     const hash = contentHash(full?.text ?? "");
     const prior = getMaterialExtraction(m.id);
-    if (prior && prior.status === "ready" && prior.content_hash === hash) {
+    // Skip only a *clean* prior extraction of unchanged content. A "ready" row
+    // with a non-null error had chunk failures (partial or total) — re-extract
+    // to retry the failed chunks instead of freezing the incomplete result. A
+    // total failure is stamped status='error' below, which also isn't skipped.
+    // A clean run that yielded 0 concepts (e.g. a table-of-contents material)
+    // is a real empty result and is skipped, so genuinely-empty materials
+    // don't re-run the LLM on every build.
+    if (!opts.force && prior && prior.status === "ready" && prior.content_hash === hash && !prior.error) {
+      if (totalChunks > 0) {
+        processedChunks += chunkCounts.get(m.id) ?? 0;
+        setBuildProgress(projectId, processedChunks, totalChunks);
+      }
       skipped++;
       continue;
     }
@@ -236,64 +307,111 @@ export async function extractConceptsForProject(projectId: string): Promise<{
       continue;
     }
 
-    const { results, errors: chunkErrors } = await mapWithConcurrency(chunks, CONCURRENCY, (c) =>
-      extractChunk(model, c.text),
-    );
+    const { results, errors: chunkErrors } = await mapWithConcurrency(chunks, concurrency, async (c) => {
+      const out = await extractChunk(model, c.text);
+      // Chunk done → bump the progress bar. processedChunks++ is single-threaded
+      // safe (no await between the read and write); setBuildProgress is sync.
+      if (totalChunks > 0) {
+        processedChunks++;
+        setBuildProgress(projectId, processedChunks, totalChunks);
+      }
+      return out;
+    });
     for (const [idx, err] of chunkErrors) {
       errors.push(`material "${m.title}" chunk ${chunks[idx].ordinal}: ${err.message}`);
     }
 
-    // Pass A: upsert concepts + provenance, build a material-level label→slug
-    // map so Pass B can resolve edge endpoints (an edge may reference a concept
-    // label that appeared in a different chunk of the same material).
-    const labelToSlug = new Map<string, string>();
-    for (let i = 0; i < results.length; i++) {
-      const out = results[i];
-      if (!out) continue;
-      const ordinal = chunks[i].ordinal;
-      for (const c of out.concepts) {
-        const slug = normalizeLabel(c.label);
-        if (!slug) continue; // label that normalizes to empty (e.g. all symbols) → drop
-        if (!labelToSlug.has(c.label)) labelToSlug.set(c.label, slug);
-        const { id, created } = upsertConcept(projectId, slug, c.label, c.description);
-        if (created) newConceptIds.add(id);
-        upsertConceptSource(id, m.id, ordinal, c.evidence ?? null);
-      }
+    // Every chunk failed — typically the model was unreachable, so the calls
+    // fail fast and chunkErrors covers the whole set. This is a *failed*
+    // extraction, not a "ready with 0 concepts" one: stamp status='error' so
+    // the chip surfaces the failure and the next build re-extracts (error rows
+    // aren't skipped). This is the hole that previously bricked projects at
+    // 0 concepts when the model was down during the first build.
+    if (chunkErrors.size === chunks.length) {
+      upsertMaterialExtraction(m.id, projectId, "error", {
+        contentHash: hash,
+        error: `all ${chunks.length} chunk(s) failed extraction`,
+      });
+      continue;
     }
-    // Pass B: edges, resolving labels to deterministic concept ids. Skip edges
-    // whose endpoints aren't in this material's concepts or that self-loop.
-    for (const out of results) {
-      if (!out) continue;
-      for (const e of out.edges) {
-        const srcSlug = labelToSlug.get(e.source);
-        const tgtSlug = labelToSlug.get(e.target);
-        if (!srcSlug || !tgtSlug || srcSlug === tgtSlug) continue;
-        upsertEdge(
-          projectId,
-          conceptId(projectId, srcSlug),
-          conceptId(projectId, tgtSlug),
-          e.relation,
-          e.confidence,
-          e.confidence_score,
-          e.evidence ?? null,
-        );
-      }
-    }
+    // Partial failure: complete the extraction from the surviving chunks, but
+    // record the failure count so the chip surfaces it and the next build
+    // re-extracts to retry the failed chunks (a ready row with a non-null
+    // error isn't skipped).
+    const chunkErrorSummary = chunkErrors.size > 0 ? `${chunkErrors.size}/${chunks.length} chunk(s) failed` : null;
 
-    recomputeConceptSourceCounts(projectId);
-    upsertMaterialExtraction(m.id, projectId, "ready", {
-      contentHash: hash,
-      conceptCount: countConceptsForMaterial(m.id),
-    });
+    // All DB writes for this material in one transaction so a crash leaves
+    // consistent state — concepts/sources/edges and the "ready" stamp land
+    // together or not at all. The LLM fan-out ran above (outside the txn); only
+    // the sync merges are atomic (better-sqlite3 transactions can't span awaits).
+    db.transaction(() => {
+      // Pass A: upsert concepts + provenance. Apply the per-chunk cap here so a
+      // chunk that returned too many (despite the prompt) only contributes its
+      // leading MAX_CONCEPTS_PER_CHUNK concepts. validSlugs is the set of slugs
+      // present for this material, used by Pass B to ground edge endpoints.
+      const validSlugs = new Set<string>();
+      for (let i = 0; i < results.length; i++) {
+        const out = results[i];
+        if (!out) continue;
+        const ordinal = chunks[i].ordinal;
+        const kept = out.concepts.slice(0, MAX_CONCEPTS_PER_CHUNK);
+        for (const c of kept) {
+          const slug = normalizeLabel(c.label);
+          if (!slug) continue; // label that normalizes to empty (e.g. all symbols) → drop
+          validSlugs.add(slug);
+          const { id, created } = upsertConcept(projectId, slug, c.label, c.description);
+          if (created) newConceptIds.add(id);
+          upsertConceptSource(id, m.id, ordinal, c.evidence ?? null);
+        }
+      }
+      // Pass B: edges, resolving endpoints by slug (not exact label) so an edge
+      // whose label drifted in casing/spacing from the concept label still
+      // grounds. Skip edges whose endpoints aren't in this material's concepts
+      // (incl. capped-out ones) or that self-loop. For symmetric relations,
+      // canonicalize direction (source id < target id) so a reversed emission
+      // collapses onto the same edge instead of creating two.
+      for (const out of results) {
+        if (!out) continue;
+        for (const e of out.edges) {
+          const srcSlug = normalizeLabel(e.source);
+          const tgtSlug = normalizeLabel(e.target);
+          if (!srcSlug || !tgtSlug || srcSlug === tgtSlug) continue;
+          if (!validSlugs.has(srcSlug) || !validSlugs.has(tgtSlug)) continue;
+          let srcId = conceptId(projectId, srcSlug);
+          let tgtId = conceptId(projectId, tgtSlug);
+          if (SYMMETRIC_RELATIONS.has(e.relation) && srcId > tgtId) {
+            [srcId, tgtId] = [tgtId, srcId];
+          }
+          upsertEdge(
+            projectId,
+            srcId,
+            tgtId,
+            e.relation,
+            e.confidence,
+            e.confidence_score,
+            e.evidence ?? null,
+          );
+        }
+      }
+      recomputeConceptSourceCounts(projectId);
+      upsertMaterialExtraction(m.id, projectId, "ready", {
+        contentHash: hash,
+        conceptCount: countConceptsForMaterial(m.id),
+        error: chunkErrorSummary,
+      });
+    })();
     processed++;
   }
 
-  // After all materials: embed newly-created concepts and recompute the
-  // computed similarity edges across the whole project.
+  // After all materials: embed newly-created concepts. Recompute the computed
+  // similarity edges only when something was actually (re-)extracted this run
+  // — a no-op build (every material skipped) leaves the concept/edge set
+  // unchanged, so recomputing would just delete and re-insert identical
+  // similarity edges for nothing. The similarity matrix depends only on the
+  // concept/edge set, which only changes when a material is (re-)extracted.
   await embedMissingConcepts(projectId, newConceptIds);
-  computeSimilarityEdges(projectId);
+  if (processed > 0 || opts.force) computeSimilarityEdges(projectId);
   const totalEdges = listEdgesForProject(projectId).length;
-  setEdgeCountsForProject(projectId, totalEdges);
 
   return {
     processed,
@@ -302,4 +420,8 @@ export async function extractConceptsForProject(projectId: string): Promise<{
     skipped,
     errors,
   };
+  } finally {
+    // Clear the progress row so a stale bar never lingers into the next view.
+    if (totalChunks > 0) clearBuildProgress(projectId);
+  }
 }
