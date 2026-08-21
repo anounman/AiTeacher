@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import {
   MAX_PERSONA_CONTEXT,
   PERSONA_PRESETS,
@@ -68,14 +69,15 @@ export function PersonaEditor({
         {compact ? "teacher" : selected.label}
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4" role="presentation" onMouseDown={() => setOpen(false)}>
+      {open && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 px-4" role="presentation" onMouseDown={() => setOpen(false)}>
           <section
             role="dialog"
             aria-modal="true"
             aria-labelledby="teacher-persona-title"
             onMouseDown={(event) => event.stopPropagation()}
-            className="w-full max-w-[540px] rounded-card border border-border bg-surface p-5 text-content shadow-float"
+            className="w-full max-w-[540px] rounded-card border border-border-strong bg-surface p-5 text-content shadow-float"
+            style={{ backgroundColor: "var(--surface)" }}
           >
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -138,7 +140,8 @@ export function PersonaEditor({
               </button>
             </div>
           </section>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
