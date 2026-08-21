@@ -50,25 +50,25 @@
 }
 
 html[data-theme="dark"] {
-  --paper: #1a1b1b;
-  --paper-2: #252626;
-  --paper-3: #131414;
-  --ink: #ecead8;
-  --ink-2: #a8a99e;
-  --ink-3: #9a9b8e;
-  --rule: #d9685a;
-  --feynman: #7aa8d8;
-  --line: #3a3b39;
-  --grid: rgba(236, 234, 216, 0.05);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.34), 0 1px 1px rgba(0, 0, 0, 0.20);
-  --shadow-float: 0 20px 54px rgba(0, 0, 0, 0.45), 0 6px 18px rgba(0, 0, 0, 0.3);
-  --amber: #d9a441;
-  --rose: #e06a7c;
+  --paper: #0c0c0e;      /* deep near-black — the main surface */
+  --paper-2: #151518;    /* cards / raised surfaces */
+  --paper-3: #1c1c20;    /* deepest — sidebars / inset areas */
+  --ink: #e8e8ec;        /* cool off-white — primary text */
+  --ink-2: #9b9ba3;      /* muted — secondary text */
+  --ink-3: #6b6b74;      /* faint — captions / placeholders */
+  --rule: #ff7a3d;       /* brighter orange — pops on dark */
+  --feynman: #5ba8f5;    /* brighter blue — readable on dark */
+  --line: #2a2a30;       /* subtle but visible hairlines */
+  --grid: rgba(232, 232, 236, 0.04);
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.35);
+  --shadow-float: 0 24px 60px rgba(0, 0, 0, 0.65), 0 8px 24px rgba(0, 0, 0, 0.45);
+  --amber: #e8a838;
+  --rose: #f06a7c;
 
   --surface: var(--paper-2);
   --surface-2: var(--paper-3);
   --border: var(--line);
-  --border-strong: color-mix(in oklab, var(--ink) 20%, var(--line));
+  --border-strong: color-mix(in oklab, var(--ink) 24%, var(--line));
   --ring: var(--ink);
   --ring-accent: var(--rule);
   --content: var(--ink);
@@ -440,7 +440,7 @@ textarea.settings-input:focus { border-color: var(--ink); }
   padding: 0.1em 0.32em;
   border-radius: 3px;
 }
-html[data-theme="dark"] .prose-chat code { background: rgba(236, 234, 216, 0.10); }
+html[data-theme="dark"] .prose-chat code { background: rgba(232, 232, 236, 0.10); }
 .prose-chat pre {
   background: var(--paper-3);
   border: 1px solid var(--line);
@@ -500,8 +500,8 @@ html[data-theme="dark"] .prose-chat code { background: rgba(236, 234, 216, 0.10)
 ::-webkit-scrollbar-thumb { background: #c9c6b6; border-radius: 6px; }
 ::-webkit-scrollbar-thumb:hover { background: #b4b1a1; }
 ::-webkit-scrollbar-track { background: transparent; }
-html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #3a3b39; }
-html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4a4b49; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #2e2e34; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #3e3e46; }
 
 /* Focus rings — ink, not browser blue */
 :where(button, a, input, textarea, select):focus-visible {
