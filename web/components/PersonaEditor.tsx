@@ -61,7 +61,7 @@ export function PersonaEditor({
           setError(null);
           setOpen(true);
         }}
-        className="mono inline-flex items-center gap-1 rounded-[3px] border border-line bg-paper-2 px-2 py-1 text-[10px] tracking-wide text-ink-2 transition-colors hover:border-ink/40 hover:text-ink"
+        className="mono inline-flex items-center gap-1 rounded-control border border-border bg-surface-2 px-2 py-1 text-[10px] tracking-wide text-content-muted transition-colors hover:border-border-strong hover:text-content"
         aria-label="Choose teacher persona"
       >
         <span aria-hidden>◌</span>
@@ -69,25 +69,25 @@ export function PersonaEditor({
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/35 px-4" role="presentation" onMouseDown={() => setOpen(false)}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4" role="presentation" onMouseDown={() => setOpen(false)}>
           <section
             role="dialog"
             aria-modal="true"
             aria-labelledby="teacher-persona-title"
             onMouseDown={(event) => event.stopPropagation()}
-            className="w-full max-w-[540px] rounded-[5px] border border-line bg-paper-2 p-5 text-ink shadow-2xl"
+            className="w-full max-w-[540px] rounded-card border border-border bg-surface p-5 text-content shadow-float"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="eyebrow">Teacher style</p>
-                <h2 id="teacher-persona-title" className="mt-1 text-[20px] leading-tight text-ink">
+                <p className="mono text-[10px] tracking-[0.12em] text-content-faint">TEACHER STYLE</p>
+                <h2 id="teacher-persona-title" className="mt-1 font-serif text-[20px] leading-tight text-content">
                   How should I teach you?
                 </h2>
-                <p className="mt-1 text-[13px] leading-relaxed text-ink-3">
+                <p className="mt-1 text-[13px] leading-relaxed text-content-muted">
                   This changes tone, pacing, and examples. It cannot override source or safety rules.
                 </p>
               </div>
-              <button type="button" onClick={() => setOpen(false)} className="mono text-[14px] text-ink-3 hover:text-ink" aria-label="Close">
+              <button type="button" onClick={() => setOpen(false)} className="text-[18px] leading-none text-content-faint transition-colors hover:text-content" aria-label="Close">
                 ×
               </button>
             </div>
@@ -100,17 +100,17 @@ export function PersonaEditor({
                     type="button"
                     key={item.id}
                     onClick={() => setPreset(item.id)}
-                    className={`rounded-[4px] border p-3 text-left transition-colors ${active ? "border-feynman bg-feynman/10" : "border-line bg-paper hover:border-ink/30"}`}
+                    className={`rounded-control border p-3 text-left transition-colors ${active ? "border-feynman bg-feynman/10" : "border-border bg-paper hover:border-border-strong"}`}
                   >
-                    <span className="text-[13px] font-medium text-ink">{item.label}</span>
-                    <span className="mt-0.5 block text-[11px] leading-relaxed text-ink-3">{item.description}</span>
+                    <span className="text-[13px] font-medium text-content">{item.label}</span>
+                    <span className="mt-0.5 block text-[11px] leading-relaxed text-content-muted">{item.description}</span>
                   </button>
                 );
               })}
             </div>
 
             <label className="mt-4 block">
-              <span className="mono text-[10px] tracking-wide text-ink-3">Learning context (optional)</span>
+              <span className="mono text-[10px] tracking-wide text-content-faint">Learning context (optional)</span>
               <textarea
                 value={context}
                 onChange={(event) => {
@@ -120,9 +120,9 @@ export function PersonaEditor({
                 maxLength={MAX_PERSONA_CONTEXT}
                 rows={4}
                 placeholder="I am new to this. Use football examples, explain slowly, and check me after each idea."
-                className="mt-1.5 w-full resize-y rounded-[4px] border border-line bg-paper px-3 py-2 text-[13px] leading-relaxed text-ink outline-none placeholder:text-ink-3 focus:border-ink/40"
+                className="mt-1.5 w-full resize-y rounded-control border border-border bg-paper px-3 py-2 text-[13px] leading-relaxed text-content outline-none transition-colors placeholder:text-content-faint focus-visible:ring-2 focus-visible:ring-ring"
               />
-              <span className="mono mt-1 flex justify-between text-[9px] text-ink-3">
+              <span className="mono mt-1 flex justify-between text-[9px] text-content-faint">
                 <span>Describe your level, goals, pace, and useful examples.</span>
                 <span>{context.length}/{MAX_PERSONA_CONTEXT}</span>
               </span>
@@ -130,10 +130,10 @@ export function PersonaEditor({
 
             {error && <p className="mono mt-2 text-[11px] text-rule">{error}</p>}
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setOpen(false)} className="mono rounded-[3px] px-3 py-1.5 text-[11px] text-ink-3 hover:text-ink">
+              <button type="button" onClick={() => setOpen(false)} className="mono rounded-control px-3 py-1.5 text-[11px] text-content-muted transition-colors hover:text-content">
                 cancel
               </button>
-              <button type="button" onClick={save} disabled={saving} className="mono rounded-[3px] bg-ink px-4 py-1.5 text-[11px] text-paper-2 disabled:opacity-50">
+              <button type="button" onClick={save} disabled={saving} className="mono rounded-control bg-content px-4 py-1.5 text-[11px] text-paper disabled:opacity-50">
                 {saving ? "saving…" : "save teacher"}
               </button>
             </div>
