@@ -201,13 +201,10 @@ body {
   .app-chat-input button { min-width: 40px; min-height: 40px; }
 }
 
-/* The graph-paper surface: faint square grid. */
+/* The graph-paper surface — disabled. The faint square grid was distracting
+   behind text. The class is kept (many pages use it) but draws nothing now. */
 .graph-paper {
-  background-image:
-    linear-gradient(to right, var(--grid) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
-  background-size: 22px 22px;
-  background-position: -1px -1px;
+  background-image: none;
 }
 
 /* The red notebook margin rule — a vertical line on the sidebar's edge. */
