@@ -116,7 +116,7 @@ _SOLO_G = re.compile(r"^\s*\[G\]\s*(\{.*\})\s*\[/G\]\s*$", re.DOTALL)
 _SOLO_DRAW = re.compile(r"^\s*\[DRAW\]\s*(.*?)\s*\[/DRAW\]\s*$", re.DOTALL)
 
 
-def render_markup_svg(markup: str, scale: float) -> dict:
+def render_markup_svg(markup: str, scale: float, font_mode: bool = False) -> dict:
     """Vector render: the same layout, emitted as SVG instead of pixels.
 
     Returns the SVG plus EXACT line/word geometry straight from layout — the
@@ -126,8 +126,15 @@ def render_markup_svg(markup: str, scale: float) -> dict:
     Colour is deliberately absent: ink is `currentColor`, so theming happens
     in CSS and the render is colour-independent (one cache entry, instant
     theme switches).
+
+    `font_mode=True` renders glyphs as <text> elements in the Caveat web
+    handwriting font instead of traced-path <use> references — a clean,
+    consistent, legible look without the harvested-glyph variability.
     """
     from svg_canvas import SVGCanvas, vector_glyphs
+
+    def canvas_factory(size, color=(0, 0, 0, 0)):
+        return SVGCanvas(size, color, font_mode=font_mode)
 
     with _lock:
         glyphs = vector_glyphs(rd.load_glyphs())
@@ -137,7 +144,7 @@ def render_markup_svg(markup: str, scale: float) -> dict:
             margin_top=30, margin_bottom=30, margin_left=20, margin_right_min=20,
             scale=scale,
             glyphs=glyphs,
-            canvas_factory=SVGCanvas,
+            canvas_factory=canvas_factory,
         )
     if not pages:
         return {"svg": "", "w": 0, "h": 0, "lines": []}
@@ -272,7 +279,8 @@ class Handler(BaseHTTPRequestHandler):
             # Opt-in vector path. The raster path stays the default until the
             # client migration lands, and stays forever for /render_pdf.
             if str(body.get("format", "png")).lower() == "svg":
-                return self._json(200, render_markup_svg(markup, scale))
+                font_mode = str(body.get("font", "")).lower() in ("caveat", "handwriting", "webfont")
+                return self._json(200, render_markup_svg(markup, scale, font_mode=font_mode))
             img = render_markup(markup, scale, color)
             buf = io.BytesIO()
             img.save(buf, format="PNG")

@@ -64,6 +64,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0&display=swap"
         />
+        {/* Caveat — the handwriting font for the teach board. The mathwriter
+            sidecar emits <text font-family="'Caveat'"> in font_mode; the
+            browser renders these with this font. */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&display=swap"
+        />
       </head>
       <body className="flex h-full min-h-full flex-col overflow-hidden bg-paper text-ink">
         {/* Emits the theme-init script into the SSR stream via

@@ -61,6 +61,16 @@ class GlyphRef:
         self.scaled = scaled or img.size
         self.angle = angle
 
+    @property
+    def char(self):
+        """The Unicode character this glyph represents, decoded from the gid
+        ('U0061_m0' → 'a'). Used by the Caveat-font rendering path."""
+        try:
+            code = int(self.gid.split("_")[0][1:], 16)
+            return chr(code)
+        except (ValueError, IndexError):
+            return ""
+
     # --- the slice of the PIL API the glyph loop uses -------------------
     def resize(self, size, resample=None):
         img = self._img.resize(size, resample if resample is not None else Image.LANCZOS)
@@ -151,13 +161,26 @@ def _esc(text):
 
 
 class SVGCanvas:
-    """Duck-type of the PIL canvas the layout engine draws onto."""
+    """Duck-type of the PIL canvas the layout engine draws onto.
 
-    def __init__(self, size, color=(0, 0, 0, 0)):
+    `font_mode` (default False) switches glyph rendering from traced-path
+    `<use>` references to `<text>` elements in a web handwriting font
+    (Caveat). The layout engine's glyph placement, sizing and transforms are
+    reused unchanged; only the final draw call differs. This gives a clean,
+    consistent, legible handwriting look without the harvested-glyph
+    variability (D2/D3) — at the cost of losing the "real pen" stroke texture.
+    """
+
+    # The web handwriting font. Loaded by the client from Google Fonts; the
+    # server just emits font-family in the SVG so no font file is needed here.
+    HANDWRITING_FONT = "'Caveat', cursive"
+
+    def __init__(self, size, color=(0, 0, 0, 0), font_mode=False):
         self.size = size
         self.width, self.height = size
         self._nodes = []
         self._used = set()
+        self._font_mode = font_mode
         # Exact geometry, straight from layout — this replaces the client's
         # alpha-channel scanning for line/word boxes.
         self.glyph_boxes = []
@@ -166,14 +189,43 @@ class SVGCanvas:
     def alpha_composite(self, img, xy=(0, 0), *_args, **_kwargs):
         x, y = xy
         if isinstance(img, GlyphRef):
-            self._used.add(img.gid)
-            self._nodes.append(
-                f'<use href="#g{img.gid}" transform="{img.svg_transform(x, y)}"/>'
-            )
+            if self._font_mode and img.char:
+                self._emit_font_glyph(img, x, y)
+            else:
+                self._used.add(img.gid)
+                self._nodes.append(
+                    f'<use href="#g{img.gid}" transform="{img.svg_transform(x, y)}"/>'
+                )
             w, h = img.size
             self.glyph_boxes.append((float(x), float(y), float(w), float(h)))
             return
         self._embed(img, x, y)
+
+    def _emit_font_glyph(self, img: "GlyphRef", x: float, y: float):
+        """Render a single glyph as a <text> element in the handwriting font,
+        positioned to match where the layout engine placed the glyph image."""
+        ch = _esc(img.char)
+        ew, eh = img.size
+        bw, bh = img.base
+        # The glyph image's height ≈ the font size. The baseline sits near the
+        # bottom of the glyph box. SVG <text> y= is the baseline, so offset by
+        # ~85% of the glyph height (empirically where the baseline falls in the
+        # harvested glyphs).
+        font_size = max(eh, 8)
+        baseline_y = y + eh * 0.82
+        parts = [f"translate({x + ew / 2.0:.2f},{baseline_y:.2f})"]
+        if abs(img.angle) > 1e-3:
+            parts.append(f"rotate({-img.angle:.2f})")
+        transform = " ".join(parts)
+        self._nodes.append(
+            f'<text transform="{transform}" '
+            f'font-family="{self.HANDWRITING_FONT}" '
+            f'font-size="{font_size:.1f}" '
+            f'font-weight="600" '
+            f'text-anchor="middle" '
+            f'dominant-baseline="alphabetic" '
+            f'fill="currentColor">{ch}</text>'
+        )
 
     def paste(self, img, xy=(0, 0), mask=None, *_args, **_kwargs):
         self.alpha_composite(img, xy)
@@ -281,9 +333,12 @@ class SVGCanvas:
         atlas once per session and `<use href="#g…">` resolves against those
         shared defs, so a render's payload is just its `<use>` transforms
         (~2 KB instead of ~39 KB).
+
+        In font_mode there are no `<use>` refs — glyphs are `<text>` elements —
+        so defs are always empty and the atlas is never needed.
         """
         defs = []
-        if include_defs:
+        if include_defs and not self._font_mode:
             atlas = load_or_build()["glyphs"]
             for gid in sorted(self._used):
                 glyph = atlas.get(gid)

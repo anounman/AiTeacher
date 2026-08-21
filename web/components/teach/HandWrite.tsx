@@ -42,6 +42,16 @@ type RenderResult = {
   stepMap?: string;
 };
 
+// SVG font-mode render result: the server emits <text> elements in the Caveat
+// handwriting font instead of traced glyph paths. The browser renders these
+// with the Caveat font loaded from Google Fonts (see app/layout.tsx).
+type SvgRenderResult = {
+  svg: string;
+  w: number;
+  h: number;
+  lines: { x: number; y: number; w: number; h: number; words: { x: number; y: number; w: number; h: number }[] }[];
+};
+
 // Size hierarchy from the Stitch design (design/live-lesson-stitch.png),
 // tightened ~28% after iPad testing: at the original sizes a heading filled a
 // third of the screen width and a lesson felt like poster lettering, not
@@ -101,6 +111,28 @@ function fetchRender(markup: string, hex: string, role: WriteRole): Promise<Rend
   })();
   cache.set(key, p);
   p.catch(() => cache.delete(key));
+  return p;
+}
+
+// SVG font-mode fetch: the server renders glyphs as <text> in the Caveat
+// handwriting font. Cached separately from the PNG path. Falls back to the
+// PNG glyph path on any error.
+const svgCache = new Map<string, Promise<SvgRenderResult>>();
+function fetchRenderSvg(markup: string, role: WriteRole): Promise<SvgRenderResult> {
+  const key = `${role}|${markup}`;
+  const hit = svgCache.get(key);
+  if (hit) return hit;
+  const p = (async () => {
+    const res = await fetch("/api/handwrite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markup, scale: ROLE_SCALE[role], format: "svg", font: "caveat" }),
+    });
+    if (!res.ok) throw new Error(`handwrite svg ${res.status}`);
+    return (await res.json()) as SvgRenderResult;
+  })();
+  svgCache.set(key, p);
+  p.catch(() => svgCache.delete(key));
   return p;
 }
 
@@ -288,6 +320,38 @@ export function HandWrite({
       try {
         const role = roleFor(markup, color);
         const diagram = isDiagramMarkup(markup);
+
+        // Font mode: render as inline SVG with the Caveat handwriting font.
+        // The browser renders the <text> elements with the Caveat font loaded
+        // from Google Fonts. Falls back to the PNG glyph path on any error.
+        // Diagrams ([G]/[DRAW]) keep the glyph engine — they need traced shapes,
+        // not a font.
+        const useFontMode = !diagram && localStorage.getItem("aiteacher.writer.font") === "caveat";
+        if (useFontMode) {
+          try {
+            const { svg, w, h } = await fetchRenderSvg(markup, role);
+            const wrapper = document.createElement("div");
+            wrapper.style.cssText = `width:${Math.min(w, 860)}px;max-width:100%;display:block;`;
+            wrapper.innerHTML = svg;
+            const svgEl = wrapper.querySelector("svg");
+            if (svgEl) {
+              svgEl.style.width = "100%";
+              svgEl.style.height = "auto";
+              svgEl.style.display = "block";
+              if (color === "ink") svgEl.style.color = "var(--ink)";
+              else if (color === "red") svgEl.style.color = "var(--rule)";
+              else if (color === "blue") svgEl.style.color = "var(--feynman)";
+            }
+            host.style.position = "relative";
+            host.appendChild(wrapper);
+            wrapper.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, fill: "forwards" });
+            setFailed(false);
+            return;
+          } catch {
+            // SVG font path failed — fall through to the PNG glyph path
+          }
+        }
+
         const { png, w, h, parts, steps, stepMap } = await fetchRender(
           markup,
           renderHex(color, diagram),
